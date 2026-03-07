@@ -8,10 +8,10 @@ use core::panic::PanicInfo;
 
 bootloader_api::entry_point!(kernel_main);
 fn kernel_main(_boot_info: &'static mut BootInfo) -> ! {
-    loop {}
+    kernel::hlt_loop();
 }
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    loop {}
+    kernel::hlt_loop();
 }
