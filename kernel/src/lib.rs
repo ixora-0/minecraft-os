@@ -4,8 +4,12 @@
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
+pub mod logger;
+pub mod rendering;
+pub mod serial;
+
 pub fn test_runner(tests: &[&dyn Fn()]) {
-    // println!("Running {} tests", tests.len());
+    log::info!("Running {} tests", tests.len());
     for test in tests {
         test();
     }

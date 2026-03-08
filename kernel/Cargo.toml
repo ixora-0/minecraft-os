@@ -9,3 +9,19 @@ default-target = "x86_64-unknown-none"
 [dependencies]
 x86_64 = "0.15.4"
 bootloader_api = "0.11.15"
+embedded-graphics = "0.8.2"
+log = { version = "0.4.17", default-features = false }
+conquer-once = { version = "0.4.0", default-features = false }
+spin = "0.10.0"
+lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+uart_16550 = "0.2.19"
+
+[dependencies.noto-sans-mono-bitmap]
+version = "0.2.0"
+default-features = false
+features = [
+    "regular",
+    "size_16",
+    "unicode-basic-latin",
+    "unicode-specials",
+]
