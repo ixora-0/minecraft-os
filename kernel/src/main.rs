@@ -25,7 +25,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         init_framebuffer(framebuffer);
     }
     let mut renderer = Renderer::new();
-    // TODO: Make clear faster
     renderer.clear(Color::BLACK);
     init_logger();
     log::info!("Hello, World!");

@@ -1,5 +1,3 @@
-use core::fmt;
-
 use bootloader_api::info::{FrameBuffer, FrameBufferInfo, PixelFormat};
 use embedded_graphics::{
     Pixel,
@@ -122,6 +120,41 @@ impl DrawTarget for Renderer {
                 (c.0 as usize, c.1 as usize)
             };
             self.render_pixel(framebuffer, x, y, color);
+        }
+
+        Ok(())
+    }
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        let mut fb_once = FRAMEBUFFER.lock();
+        let framebuffer = fb_once
+            .get_mut()
+            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+        let info = FRAMEBUFFER_INFO
+            .get()
+            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+
+        debug_assert!(framebuffer.len() % info.bytes_per_pixel == 0);
+        match info.pixel_format {
+            PixelFormat::Rgb => {
+                for chunk in framebuffer.chunks_mut(info.bytes_per_pixel) {
+                    chunk[0] = color.red;
+                    chunk[1] = color.green;
+                    chunk[2] = color.blue;
+                }
+            }
+            PixelFormat::Bgr => {
+                for chunk in framebuffer.chunks_mut(info.bytes_per_pixel) {
+                    chunk[0] = color.blue;
+                    chunk[1] = color.green;
+                    chunk[2] = color.red;
+                }
+            }
+            PixelFormat::U8 => {
+                let gray = color.red / 3 + color.green / 3 + color.blue / 3;
+                framebuffer.fill(gray);
+            }
+            other => panic!("unknown pixel format {other:?}"),
         }
 
         Ok(())
