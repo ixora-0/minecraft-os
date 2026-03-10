@@ -8,11 +8,12 @@ use core::panic::PanicInfo;
 use embedded_graphics::draw_target::DrawTarget;
 use kernel::{
     logger::init_logger,
-    rendering::{Color, Renderer, init_framebuffer},
+    rendering::{Color, GLOBAL_RENDERER, init_global_renderer},
 };
 
 bootloader_api::entry_point!(kernel_main);
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
+    // init global renderer
     {
         // free the doubly wrapped framebuffer from the boot info struct
         let frame_buffer_optional = &mut boot_info.framebuffer;
@@ -22,10 +23,16 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
         // unwrap the framebuffer
         let framebuffer = frame_buffer_option.unwrap();
-        init_framebuffer(framebuffer);
+        init_global_renderer(framebuffer);
     }
-    let mut renderer = Renderer::new();
-    renderer.clear(Color::BLACK);
+
+    // clear screen
+    {
+        let mut renderer_guard = GLOBAL_RENDERER.lock();
+        let renderer = renderer_guard.get_mut().expect("msg");
+        renderer.clear(Color::BLACK);
+    }
+
     init_logger();
     log::info!("Hello, World!");
     kernel::hlt_loop();

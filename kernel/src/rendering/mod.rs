@@ -9,18 +9,14 @@ use spin::{Mutex, Once};
 
 pub mod text_box;
 
-pub static FRAMEBUFFER: Mutex<Once<&'static mut [u8]>> = Mutex::new(Once::new());
-pub static FRAMEBUFFER_INFO: Once<FrameBufferInfo> = Once::new();
-const EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED: &str =
-    "Framebuffer not initialized. Probably haven't run init_framebuffer()";
+pub static GLOBAL_RENDERER: Mutex<Once<Renderer>> = Mutex::new(Once::new());
+pub const EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED: &str =
+    "Global framebuffer not initialized. Probably haven't run init_framebuffer()";
 
-pub fn init_framebuffer(framebuffer: &'static mut FrameBuffer) {
-    let frame_buffer_info = framebuffer.info().clone();
-    FRAMEBUFFER_INFO.call_once(|| frame_buffer_info);
-
-    // get the framebuffer's mutable raw byte slice
-    let raw_framebuffer = framebuffer.buffer_mut();
-    FRAMEBUFFER.lock().call_once(|| raw_framebuffer);
+pub fn init_global_renderer(framebuffer: &'static mut FrameBuffer) {
+    GLOBAL_RENDERER
+        .lock()
+        .call_once(|| Renderer::new(framebuffer));
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,19 +48,25 @@ impl PixelColor for Color {
     type Raw = RawU24;
 }
 
-pub struct Renderer {}
+pub struct Renderer {
+    framebuffer: &'static mut [u8],
+    info: FrameBufferInfo,
+}
 
 impl Renderer {
-    pub fn new() -> Renderer {
-        Renderer {}
+    pub fn new(framebuffer: &'static mut FrameBuffer) -> Self {
+        Renderer {
+            info: framebuffer.info(),
+            framebuffer: framebuffer.buffer_mut(),
+        }
     }
 
-    fn render_pixel(&self, framebuffer: &mut [u8], x: usize, y: usize, color: Color) {
-        let info = FRAMEBUFFER_INFO
-            .get()
-            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+    fn render_pixel(&mut self, x: usize, y: usize, color: Color) {
+        // let info = FRAMEBUFFER_INFO
+        //     .get()
+        //     .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
         // ignore any out of bounds pixels
-        let (width, height) = { (info.width, info.height) };
+        let (width, height) = { (self.info.width, self.info.height) };
         if !(0..width).contains(&x) || !(0..height).contains(&y) {
             return;
         }
@@ -72,15 +74,15 @@ impl Renderer {
         // calculate offset to first byte of pixel
         let byte_offset = {
             // use stride to calculate pixel offset of target line
-            let line_offset = y * info.stride;
+            let line_offset = y * self.info.stride;
             // add x position to get the absolute pixel offset in buffer
             let pixel_offset = line_offset + x;
             // convert to byte offset
-            pixel_offset * info.bytes_per_pixel
+            pixel_offset * self.info.bytes_per_pixel
         };
 
-        let pixel_buffer = &mut framebuffer[byte_offset..];
-        match info.pixel_format {
+        let pixel_buffer = &mut self.framebuffer[byte_offset..];
+        match self.info.pixel_format {
             PixelFormat::Rgb => {
                 pixel_buffer[0] = color.red;
                 pixel_buffer[1] = color.green;
@@ -110,41 +112,29 @@ impl DrawTarget for Renderer {
     where
         I: IntoIterator<Item = Pixel<Self::Color>>,
     {
-        let mut fb_once = FRAMEBUFFER.lock();
-        let framebuffer = fb_once
-            .get_mut()
-            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
         for Pixel(coordinates, color) in pixels.into_iter() {
             let (x, y) = {
                 let c: (i32, i32) = coordinates.into();
                 (c.0 as usize, c.1 as usize)
             };
-            self.render_pixel(framebuffer, x, y, color);
+            self.render_pixel(x, y, color);
         }
 
         Ok(())
     }
 
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        let mut fb_once = FRAMEBUFFER.lock();
-        let framebuffer = fb_once
-            .get_mut()
-            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
-        let info = FRAMEBUFFER_INFO
-            .get()
-            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
-
-        debug_assert!(framebuffer.len() % info.bytes_per_pixel == 0);
-        match info.pixel_format {
+        debug_assert!(self.framebuffer.len() % self.info.bytes_per_pixel == 0);
+        match self.info.pixel_format {
             PixelFormat::Rgb => {
-                for chunk in framebuffer.chunks_mut(info.bytes_per_pixel) {
+                for chunk in self.framebuffer.chunks_mut(self.info.bytes_per_pixel) {
                     chunk[0] = color.red;
                     chunk[1] = color.green;
                     chunk[2] = color.blue;
                 }
             }
             PixelFormat::Bgr => {
-                for chunk in framebuffer.chunks_mut(info.bytes_per_pixel) {
+                for chunk in self.framebuffer.chunks_mut(self.info.bytes_per_pixel) {
                     chunk[0] = color.blue;
                     chunk[1] = color.green;
                     chunk[2] = color.red;
@@ -152,7 +142,7 @@ impl DrawTarget for Renderer {
             }
             PixelFormat::U8 => {
                 let gray = color.red / 3 + color.green / 3 + color.blue / 3;
-                framebuffer.fill(gray);
+                self.framebuffer.fill(gray);
             }
             other => panic!("unknown pixel format {other:?}"),
         }
@@ -163,10 +153,6 @@ impl DrawTarget for Renderer {
 
 impl OriginDimensions for Renderer {
     fn size(&self) -> Size {
-        let info = FRAMEBUFFER_INFO
-            .get()
-            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
-
-        Size::new(info.width as u32, info.height as u32)
+        Size::new(self.info.width as u32, self.info.height as u32)
     }
 }

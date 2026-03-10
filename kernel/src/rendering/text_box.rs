@@ -2,7 +2,10 @@ use core::fmt;
 
 use noto_sans_mono_bitmap::RasterizedChar;
 
-use crate::{rendering::Renderer, serial_print};
+use crate::{
+    rendering::{EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED, GLOBAL_RENDERER, Renderer},
+    serial_print,
+};
 use embedded_graphics::{Pixel, draw_target::DrawTarget, geometry::Point, primitives::Rectangle};
 
 /// Constants for the usage of the [`noto_sans_mono_bitmap`] crate.
@@ -136,7 +139,10 @@ impl fmt::Write for TextBox {
         if self.serial {
             serial_print!("{}", s);
         }
-        let mut renderer = Renderer::new();
+        let mut renderer_guard = GLOBAL_RENDERER.lock();
+        let mut renderer = renderer_guard
+            .get_mut()
+            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
         for c in s.chars() {
             self.write_char(c, &mut renderer);
         }
