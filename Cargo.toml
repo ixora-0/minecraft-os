@@ -5,7 +5,7 @@ edition = "2024"
 default-run = "qemu-uefi"
 
 [workspace]
-members = ["kernel", "kernel-core"]
+members = ["kernel", "kernel-core", "tests-integration"]
 default-members = ["kernel", "kernel-core"]
 
 [build-dependencies]
@@ -14,3 +14,5 @@ bootloader = "0.11.3"
 
 [dependencies]
 ovmf-prebuilt = "0.2.7"
+bootloader = "0.11.3"
+tests-integration = { path = "tests-integration" }

@@ -1,2 +1,7 @@
 [unstable]
 bindeps = true
+[target.'cfg(target_os = "none")']
+runner = "cargo run -p minecraft-os --bin qemu-integration-test-runner --"
+
+[alias]
+test-integration = "test -p tests-integration --target x86_64-unknown-none"

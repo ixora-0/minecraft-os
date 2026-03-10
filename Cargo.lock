@@ -541,6 +541,7 @@ dependencies = [
  "bootloader",
  "kernel",
  "ovmf-prebuilt",
+ "tests-integration",
 ]
 
 [[package]]
@@ -847,6 +848,15 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tests-integration"
+version = "0.1.0"
+dependencies = [
+ "bootloader_api",
+ "kernel",
+ "x86_64 0.15.4",
 ]
 
 [[package]]
