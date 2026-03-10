@@ -2,7 +2,8 @@ use conquer_once::spin::OnceCell;
 use core::fmt::Write;
 use spin::Mutex;
 
-use crate::rendering::text_box::TextBox;
+use crate::rendering::TextBox;
+use crate::serial_println;
 use embedded_graphics::geometry::{Point, Size};
 use embedded_graphics::primitives::Rectangle;
 
@@ -14,13 +15,10 @@ pub struct TextBoxLogger {
 
 impl TextBoxLogger {
     fn new() -> Self {
-        let text_box = TextBox::new(
-            Rectangle {
-                top_left: Point::new(100, 100),
-                size: Size::new(400, 300),
-            },
-            true,
-        );
+        let text_box = TextBox::new(Rectangle {
+            top_left: Point::new(100, 100),
+            size: Size::new(400, 300),
+        });
         TextBoxLogger {
             text_box: Mutex::new(text_box),
         }
@@ -33,6 +31,7 @@ impl log::Log for TextBoxLogger {
     }
 
     fn log(&self, record: &log::Record) {
+        serial_println!("{:5}: {}", record.level(), record.args());
         let mut text_box = self.text_box.lock();
         writeln!(text_box, "{:5}: {}", record.level(), record.args()).unwrap();
     }

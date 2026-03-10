@@ -5,8 +5,7 @@ edition = "2024"
 default-run = "qemu-uefi"
 
 [workspace]
-# members = ["kernel", "tests-integration"]
-members = ["kernel"]
+members = ["kernel", "kernel-core"]
 
 [build-dependencies]
 kernel = { path = "kernel", artifact = "bin", target = "x86_64-unknown-none" }

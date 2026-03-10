@@ -1,15 +1,14 @@
 #![no_std]
 #![no_main]
-#![feature(custom_test_frameworks)]
-#![test_runner(kernel::test_runner)]
 
 use bootloader_api::BootInfo;
 use core::panic::PanicInfo;
 use embedded_graphics::draw_target::DrawTarget;
 use kernel::{
     logger::init_logger,
-    rendering::{Color, GLOBAL_RENDERER, init_global_renderer},
+    rendering::{GLOBAL_RENDERER, init_global_renderer},
 };
+use kernel_core::rendering::Color;
 
 bootloader_api::entry_point!(kernel_main);
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {

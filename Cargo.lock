@@ -422,12 +422,21 @@ dependencies = [
  "bootloader_api",
  "conquer-once",
  "embedded-graphics",
+ "kernel-core",
  "lazy_static",
  "log",
- "noto-sans-mono-bitmap",
  "spin 0.10.0",
  "uart_16550",
  "x86_64 0.15.4",
+]
+
+[[package]]
+name = "kernel-core"
+version = "0.1.0"
+dependencies = [
+ "bootloader_api",
+ "embedded-graphics",
+ "noto-sans-mono-bitmap",
 ]
 
 [[package]]
