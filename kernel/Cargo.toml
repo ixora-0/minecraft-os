@@ -12,6 +12,7 @@ test = false
 bench = false
 [lib]
 test = false
+doctest = false
 
 [dependencies]
 kernel-core = { path = "../kernel-core" }
