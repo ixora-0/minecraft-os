@@ -143,3 +143,39 @@ impl<'f> OriginDimensions for Renderer<'f> {
         Size::new(self.info.width as u32, self.info.height as u32)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_color_with_intensity() {
+        // tests for overflow
+        let color = Color::WHITE;
+        let color_with_intensity = color.with_intensity(255);
+        assert_eq!(color_with_intensity.red, 255);
+        assert_eq!(color_with_intensity.green, 255);
+        assert_eq!(color_with_intensity.blue, 255);
+    }
+
+    #[test]
+    fn test_clear_rgb() {
+        use bootloader_api::info::{FrameBuffer, FrameBufferInfo, PixelFormat};
+        const INFO: FrameBufferInfo = FrameBufferInfo {
+            byte_len: 16 * 16 * 3,
+            width: 16,
+            height: 16,
+            pixel_format: PixelFormat::Rgb,
+            bytes_per_pixel: 3,
+            stride: 16 * 3,
+        };
+
+        let mut buffer = [0u8; INFO.byte_len];
+        let buffer_addr = buffer.as_mut_ptr() as u64;
+        let mut fb = unsafe { FrameBuffer::new(buffer_addr, INFO) };
+
+        let mut renderer = Renderer::new(&mut fb);
+        renderer.clear(Color::WHITE).unwrap();
+
+        assert!(buffer.iter().all(|&b| b == 255));
+    }
+}
