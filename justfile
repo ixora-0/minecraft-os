@@ -7,8 +7,17 @@ run:
 run-bios:
     cargo run -p minecraft-os --bin qemu-bios
 
+alias t := test
 test:
     cargo test
 
-integration-test:
-    cargo integration-test
+alias ti := test-integration
+test-integration:
+    cargo test-integration
+
+alias b := build
+build:
+    cargo build
+
+move-images:
+    cargo run -p minecraft-os --bin move-images
