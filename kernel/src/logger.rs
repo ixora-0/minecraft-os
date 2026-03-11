@@ -1,6 +1,7 @@
 use conquer_once::spin::OnceCell;
 use core::fmt::Write;
 use spin::Mutex;
+use x86_64::instructions::interrupts;
 
 use crate::rendering::TextBox;
 use crate::serial_println;
@@ -17,7 +18,7 @@ impl TextBoxLogger {
     fn new() -> Self {
         let text_box = TextBox::new(Rectangle {
             top_left: Point::new(50, 10),
-            size: Size::new(500, 700),
+            size: Size::new(1000, 700),
         });
         TextBoxLogger {
             text_box: Mutex::new(text_box),
@@ -32,8 +33,10 @@ impl log::Log for TextBoxLogger {
 
     fn log(&self, record: &log::Record) {
         serial_println!("{:5}: {}", record.level(), record.args());
-        let mut text_box = self.text_box.lock();
-        writeln!(text_box, "{:5}: {}", record.level(), record.args()).unwrap();
+        interrupts::without_interrupts(|| {
+            let mut text_box = self.text_box.lock();
+            writeln!(text_box, "{:5}: {}", record.level(), record.args()).unwrap();
+        });
     }
 
     fn flush(&self) {}

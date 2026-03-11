@@ -24,3 +24,5 @@ conquer-once = { version = "0.4.0", default-features = false }
 spin = "0.10.0"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 uart_16550 = "0.2.19"
+pic8259 = "0.11.0"
+pc-keyboard = "0.8.0"
