@@ -12,7 +12,6 @@ use kernel_core::rendering::Color;
 
 bootloader_api::entry_point!(kernel_main);
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
-    kernel::init();
     // init global renderer
     {
         // free the doubly wrapped framebuffer from the boot info struct
@@ -32,9 +31,11 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         let renderer = renderer_guard.get_mut().expect("msg");
         renderer.clear(Color::BLACK);
     }
-
     init_logger();
     log::info!("Hello, World!");
+
+    kernel::init();
+
     kernel::hlt_loop();
 }
 
