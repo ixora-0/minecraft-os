@@ -2,8 +2,9 @@ use bootloader_api::info::{FrameBuffer, FrameBufferInfo, PixelFormat};
 use embedded_graphics::{
     Pixel,
     draw_target::DrawTarget,
-    geometry::{OriginDimensions, Size},
+    geometry::{Dimensions, OriginDimensions, Size},
     pixelcolor::{PixelColor, raw::RawU24},
+    primitives::Rectangle,
 };
 
 pub mod text_box;
@@ -33,6 +34,27 @@ impl Color {
             blue: ((self.blue as u16 * intensity as u16) / 255) as u8,
         }
     }
+    pub fn to_gray(&self) -> u8 {
+        self.red / 3 + self.green / 3 + self.blue / 3
+    }
+    pub fn write_to(&self, chunk: &mut [u8], format: PixelFormat) {
+        match format {
+            PixelFormat::Rgb => {
+                chunk[0] = self.red;
+                chunk[1] = self.green;
+                chunk[2] = self.blue;
+            }
+            PixelFormat::Bgr => {
+                chunk[0] = self.blue;
+                chunk[1] = self.green;
+                chunk[2] = self.red;
+            }
+            PixelFormat::U8 => {
+                chunk[0] = self.to_gray();
+            }
+            other => panic!("unknown pixel format {other:?}"),
+        }
+    }
 }
 impl PixelColor for Color {
     type Raw = RawU24;
@@ -52,8 +74,7 @@ impl<'f> Renderer<'f> {
     }
 
     fn render_pixel(&mut self, x: usize, y: usize, color: Color) {
-        // ignore any out of bounds pixels
-        let (width, height) = { (self.info.width, self.info.height) };
+        let (width, height) = (self.info.width, self.info.height);
         if !(0..width).contains(&x) || !(0..height).contains(&y) {
             return;
         }
@@ -68,25 +89,8 @@ impl<'f> Renderer<'f> {
             pixel_offset * self.info.bytes_per_pixel
         };
 
-        let pixel_buffer = &mut self.framebuffer[byte_offset..];
-        match self.info.pixel_format {
-            PixelFormat::Rgb => {
-                pixel_buffer[0] = color.red;
-                pixel_buffer[1] = color.green;
-                pixel_buffer[2] = color.blue;
-            }
-            PixelFormat::Bgr => {
-                pixel_buffer[0] = color.blue;
-                pixel_buffer[1] = color.green;
-                pixel_buffer[2] = color.red;
-            }
-            PixelFormat::U8 => {
-                // use a simple average-based grayscale transform
-                let gray = color.red / 3 + color.green / 3 + color.blue / 3;
-                pixel_buffer[0] = gray;
-            }
-            other => panic!("unknown pixel format {other:?}"),
-        }
+        let chunk = &mut self.framebuffer[byte_offset..];
+        color.write_to(chunk, self.info.pixel_format);
     }
 }
 
@@ -110,30 +114,49 @@ impl<'f> DrawTarget for Renderer<'f> {
         Ok(())
     }
 
-    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
-        debug_assert!(self.framebuffer.len() % self.info.bytes_per_pixel == 0);
-        match self.info.pixel_format {
-            PixelFormat::Rgb => {
-                for chunk in self.framebuffer.chunks_mut(self.info.bytes_per_pixel) {
-                    chunk[0] = color.red;
-                    chunk[1] = color.green;
-                    chunk[2] = color.blue;
+    fn fill_contiguous<I>(&mut self, area: &Rectangle, colors: I) -> Result<(), Self::Error>
+    where
+        I: IntoIterator<Item = Self::Color>,
+    {
+        let mut colors = colors.into_iter();
+
+        let area = area.intersection(&self.bounding_box());
+        if area.bottom_right().is_none() {
+            return Ok(());
+        };
+
+        let bpp = self.info.bytes_per_pixel;
+        let width = area.size.width as usize;
+        let format = self.info.pixel_format;
+
+        for y in area.rows() {
+            let y = y as usize;
+            let row_start = {
+                // use stride to calculate pixel offset of target line
+                let line_offset = y * self.info.stride;
+                // add x position to get the absolute pixel offset in buffer
+                let pixel_offset = line_offset + area.top_left.x as usize;
+                // convert to byte offset
+                pixel_offset * self.info.bytes_per_pixel
+            };
+
+            let row = &mut self.framebuffer[row_start..row_start + width * bpp];
+
+            for chunk in row.chunks_mut(bpp) {
+                if let Some(color) = colors.next() {
+                    color.write_to(chunk, format);
                 }
             }
-            PixelFormat::Bgr => {
-                for chunk in self.framebuffer.chunks_mut(self.info.bytes_per_pixel) {
-                    chunk[0] = color.blue;
-                    chunk[1] = color.green;
-                    chunk[2] = color.red;
-                }
-            }
-            PixelFormat::U8 => {
-                let gray = color.red / 3 + color.green / 3 + color.blue / 3;
-                self.framebuffer.fill(gray);
-            }
-            other => panic!("unknown pixel format {other:?}"),
         }
 
+        Ok(())
+    }
+
+    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+        debug_assert!(self.framebuffer.len() % self.info.bytes_per_pixel == 0);
+        for chunk in self.framebuffer.chunks_mut(self.info.bytes_per_pixel) {
+            color.write_to(chunk, self.info.pixel_format);
+        }
         Ok(())
     }
 }
