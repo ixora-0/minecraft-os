@@ -16,3 +16,4 @@ bootloader = "0.11.3"
 ovmf-prebuilt = "0.2.7"
 bootloader = "0.11.3"
 tests-integration = { path = "tests-integration" }
+wait-timeout = "0.1.5"

@@ -542,6 +542,7 @@ dependencies = [
  "kernel",
  "ovmf-prebuilt",
  "tests-integration",
+ "wait-timeout",
 ]
 
 [[package]]
@@ -970,6 +971,15 @@ name = "volatile"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "442887c63f2c839b346c192d047a7c87e73d0689c9157b00b53dcc27dd5ea793"
+
+[[package]]
+name = "wait-timeout"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9f3bf741a801531993db6478b95682117471f76916f5e690dd8d45395b09349"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "wasi"

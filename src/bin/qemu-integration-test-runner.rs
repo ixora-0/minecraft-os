@@ -4,8 +4,12 @@ use std::{
     env,
     path::PathBuf,
     process::{Command, exit},
+    time::Duration,
 };
 use tests_integration::QemuExitCode;
+use wait_timeout::ChildExt;
+
+const TIMEOUT_SECS: u64 = 300;
 
 fn main() {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -32,31 +36,64 @@ fn main() {
     let ovmf_code = prebuilt.get_file(Arch::X64, FileType::Code);
     let ovmf_vars = prebuilt.get_file(Arch::X64, FileType::Vars);
 
-    // run qemu
-    let status = Command::new("qemu-system-x86_64")
-        .args([
-            "-drive",
-            &format!(
-                "format=raw,if=pflash,readonly=on,file={}",
-                ovmf_code.display()
-            ),
-            "-drive",
-            &format!("format=raw,if=pflash,file={}", ovmf_vars.display()),
-            "-drive",
-            &format!("format=raw,file={}", uefi_img.display()),
-            "-serial",
-            "stdio",
-            "-display",
-            "none",
-            "-device",
-            "isa-debug-exit,iobase=0xf4,iosize=0x04",
-        ])
-        .status()
-        .expect("failed to start qemu");
+    // prepare qemu command
+    let mut cmd = Command::new("qemu-system-x86_64");
+    cmd.args([
+        "-drive",
+        &format!(
+            "format=raw,if=pflash,readonly=on,file={}",
+            ovmf_code.display()
+        ),
+        "-drive",
+        &format!("format=raw,if=pflash,file={}", ovmf_vars.display()),
+        "-drive",
+        &format!("format=raw,file={}", uefi_img.display()),
+        "-serial",
+        "stdio",
+        "-display",
+        "none",
+        "-device",
+        "isa-debug-exit,iobase=0xf4,iosize=0x04",
+    ]);
 
-    let exit_code = match status.code().unwrap_or(-1) {
-        QemuExitCode::TEST_SUCCEESS_EXIT_CODE => 0,
-        c => c,
+    // spawn the qemu process (we get a std::process::Child)
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("failed to start qemu: {}", e);
+            exit(1);
+        }
     };
-    exit(exit_code);
+
+    // wait with timeout
+    match child
+        .wait_timeout(Duration::from_secs(TIMEOUT_SECS))
+        .expect("wait failed")
+    {
+        Some(status) => {
+            // qemu exited within timeout
+            let code = status.code().unwrap_or(-1);
+            let exit_code = if code == QemuExitCode::TEST_SUCCEESS_EXIT_CODE {
+                0
+            } else {
+                code
+            };
+            exit(exit_code);
+        }
+        _ => {
+            // timeout expired — kill qemu
+            eprintln!(
+                "Test timed out after {} seconds, killing qemu...",
+                TIMEOUT_SECS
+            );
+            // Try to kill; ignore kill error besides printing
+            if let Err(e) = child.kill() {
+                eprintln!("failed to kill qemu: {}", e);
+            }
+            // Reap the process and inspect exit status if desired
+            let status = child.wait().expect("failed to wait after killing qemu");
+            eprintln!("qemu terminated with status: {:?}", status);
+            exit(1);
+        }
+    }
 }
