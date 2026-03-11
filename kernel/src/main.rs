@@ -12,6 +12,7 @@ use kernel_core::rendering::Color;
 
 bootloader_api::entry_point!(kernel_main);
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
+    kernel::init();
     // init global renderer
     {
         // free the doubly wrapped framebuffer from the boot info struct

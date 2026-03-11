@@ -16,8 +16,8 @@ pub struct TextBoxLogger {
 impl TextBoxLogger {
     fn new() -> Self {
         let text_box = TextBox::new(Rectangle {
-            top_left: Point::new(100, 100),
-            size: Size::new(400, 300),
+            top_left: Point::new(50, 10),
+            size: Size::new(500, 700),
         });
         TextBoxLogger {
             text_box: Mutex::new(text_box),

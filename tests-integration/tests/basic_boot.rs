@@ -13,6 +13,7 @@ use bootloader_api::{entry_point, info::BootInfo};
 entry_point!(test_kernel_main);
 /// Entry point for `cargo test`
 fn test_kernel_main(_boot_info: &'static mut BootInfo) -> ! {
+    kernel::init();
     test_main();
     kernel::hlt_loop()
 }
