@@ -1,7 +1,7 @@
 #![no_std]
 
 use core::panic::PanicInfo;
-use kernel::serial_println;
+use kernel::{serial_print, serial_println};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
@@ -13,10 +13,24 @@ impl QemuExitCode {
     pub const TEST_SUCCEESS_EXIT_CODE: i32 = ((QemuExitCode::Success as i32) << 1) | 1;
 }
 
-pub fn test_runner(tests: &[&dyn Fn()]) {
+pub trait Testable {
+    fn run(&self) -> ();
+}
+impl<T> Testable for T
+where
+    T: Fn(),
+{
+    fn run(&self) {
+        serial_print!("{}...\t", core::any::type_name::<T>());
+        self();
+        serial_println!("[ok]");
+    }
+}
+
+pub fn test_runner(tests: &[&dyn Testable]) {
     serial_println!("Running {} tests", tests.len());
     for test in tests {
-        test();
+        test.run();
     }
     exit_qemu(QemuExitCode::Success);
 }
