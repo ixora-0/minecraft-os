@@ -4,6 +4,9 @@ default:
 run:
     cargo run -p minecraft-os
 
+run-bios:
+    cargo run -p minecraft-os --bin qemu-bios
+
 test:
     cargo test
 
