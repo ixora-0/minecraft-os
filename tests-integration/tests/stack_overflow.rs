@@ -5,7 +5,7 @@
 #![reexport_test_harness_main = "test_main"]
 #![feature(abi_x86_interrupt)]
 
-use bootloader_api::{entry_point, info::BootInfo};
+use bootloader_api::info::BootInfo;
 use core::panic::PanicInfo;
 use core::ptr::NonNull;
 use kernel;
@@ -16,7 +16,7 @@ use volatile::VolatilePtr;
 use x86_64::structures::idt::InterruptDescriptorTable;
 use x86_64::structures::idt::InterruptStackFrame;
 
-entry_point!(test_kernel_main);
+bootloader_api::entry_point!(test_kernel_main, config = &kernel::BOOTLOADER_CONFIG);
 /// Entry point for `cargo test`
 fn test_kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     kernel::gdt::init();

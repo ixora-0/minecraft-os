@@ -1,11 +1,21 @@
 #![no_std]
 #![feature(abi_x86_interrupt)]
 
+pub mod allocator;
 pub mod gdt;
 pub mod interrupts;
 pub mod logger;
+pub mod memory;
 pub mod rendering;
 pub mod serial;
+
+use bootloader_api::BootloaderConfig;
+
+pub static BOOTLOADER_CONFIG: BootloaderConfig = {
+    let mut config = BootloaderConfig::new_default();
+    config.mappings.physical_memory = Some(bootloader_api::config::Mapping::Dynamic);
+    config
+};
 
 fn build_pic_masks(enabled_irqs: &[u8]) -> (u8, u8) {
     let mut mask1: u8 = 0xFF;

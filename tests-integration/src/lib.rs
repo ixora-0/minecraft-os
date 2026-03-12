@@ -1,5 +1,6 @@
 #![no_std]
 
+// extern crate alloc;
 use core::panic::PanicInfo;
 use kernel::{serial_print, serial_println};
 
@@ -28,6 +29,7 @@ where
 }
 
 pub fn test_runner(tests: &[&dyn Testable]) {
+    serial_print!("test...\t");
     serial_println!("Running {} tests", tests.len());
     for test in tests {
         test.run();
@@ -50,3 +52,18 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
     exit_qemu(QemuExitCode::Failed);
     loop {}
 }
+
+// use core::alloc::{GlobalAlloc, Layout};
+
+// struct PanicAlloc;
+
+// unsafe impl GlobalAlloc for PanicAlloc {
+//     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+//         panic!("allocation attempted: {:?}", layout);
+//     }
+
+//     unsafe fn dealloc(&self, _: *mut u8, _: Layout) {}
+// }
+
+// #[global_allocator]
+// static A: PanicAlloc = PanicAlloc;

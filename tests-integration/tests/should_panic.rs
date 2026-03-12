@@ -8,9 +8,9 @@ use core::panic::PanicInfo;
 use kernel::{serial_print, serial_println};
 use tests_integration::{QemuExitCode, exit_qemu};
 
-use bootloader_api::{entry_point, info::BootInfo};
+use bootloader_api::info::BootInfo;
 
-entry_point!(test_kernel_main);
+bootloader_api::entry_point!(test_kernel_main, config = &kernel::BOOTLOADER_CONFIG);
 /// Entry point for `cargo test`
 fn test_kernel_main(_boot_info: &'static mut BootInfo) -> ! {
     should_fail();
