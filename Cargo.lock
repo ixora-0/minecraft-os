@@ -553,7 +553,7 @@ dependencies = [
  "bootloader",
  "kernel",
  "ovmf-prebuilt",
- "tests-integration",
+ "tests-qemu-exit-code",
  "wait-timeout",
 ]
 
@@ -894,9 +894,14 @@ dependencies = [
  "bootloader_api",
  "kernel",
  "lazy_static",
+ "tests-qemu-exit-code",
  "volatile 0.6.1",
  "x86_64 0.15.4",
 ]
+
+[[package]]
+name = "tests-qemu-exit-code"
+version = "0.1.0"
 
 [[package]]
 name = "thiserror"

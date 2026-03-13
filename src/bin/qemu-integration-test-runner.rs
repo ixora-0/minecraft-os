@@ -6,7 +6,7 @@ use std::{
     process::{Command, exit},
     time::Duration,
 };
-use tests_integration::QemuExitCode;
+use tests_qemu_exit_code::QemuExitCode;
 use wait_timeout::ChildExt;
 
 const TIMEOUT_SECS: u64 = 300;
@@ -73,10 +73,9 @@ fn main() {
         Some(status) => {
             // qemu exited within timeout
             let code = status.code().unwrap_or(-1);
-            let exit_code = if code == QemuExitCode::TEST_SUCCEESS_EXIT_CODE {
-                0
-            } else {
-                code
+            let exit_code = match code {
+                QemuExitCode::TEST_SUCCEESS_EXIT_CODE => 0,
+                _ => code,
             };
             exit(exit_code);
         }

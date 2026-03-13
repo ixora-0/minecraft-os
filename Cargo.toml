@@ -5,7 +5,7 @@ edition = "2024"
 default-run = "qemu-uefi"
 
 [workspace]
-members = ["kernel", "kernel-core", "tests-integration"]
+members = ["kernel", "kernel-core", "tests-integration", "tests-qemu-exit-code"]
 default-members = ["kernel", "kernel-core"]  # default for cargo run and cargo test
 
 [build-dependencies]
@@ -15,5 +15,5 @@ bootloader = "0.11.3"
 [dependencies]
 ovmf-prebuilt = "0.2.7"
 bootloader = "0.11.3"
-tests-integration = { path = "tests-integration" }
 wait-timeout = "0.1.5"
+tests-qemu-exit-code = { path = "tests-qemu-exit-code" }

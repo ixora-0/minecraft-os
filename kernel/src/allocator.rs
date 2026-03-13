@@ -10,6 +10,9 @@ use x86_64::structures::paging::{
 pub const HEAP_START: *mut u8 = 0x_4444_4444_0000 as *mut u8;
 pub const HEAP_SIZE: usize = 100 * 1024; // 100 KB
 
+#[global_allocator]
+static ALLOCATOR: HeapWithTracker = HeapWithTracker::new();
+
 pub struct HeapWithTracker {
     inner: LockedHeap,
     allocated_bytes: AtomicUsize,
@@ -57,7 +60,6 @@ unsafe impl GlobalAlloc for HeapWithTracker {
 }
 
 pub fn init_heap(
-    allocator: &'static HeapWithTracker,
     mapper: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
 ) -> Result<(), MapToError<Size4KiB>> {
@@ -78,7 +80,7 @@ pub fn init_heap(
     }
 
     unsafe {
-        allocator.init(HEAP_START, HEAP_SIZE);
+        ALLOCATOR.init(HEAP_START, HEAP_SIZE);
     }
 
     Ok(())

@@ -3,16 +3,7 @@
 // extern crate alloc;
 use core::panic::PanicInfo;
 use kernel::{serial_print, serial_println};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(i32)]
-pub enum QemuExitCode {
-    Success = 0x10,
-    Failed = 0x11,
-}
-impl QemuExitCode {
-    pub const TEST_SUCCEESS_EXIT_CODE: i32 = ((QemuExitCode::Success as i32) << 1) | 1;
-}
+use tests_qemu_exit_code::QemuExitCode;
 
 pub trait Testable {
     fn run(&self) -> ();
@@ -52,18 +43,3 @@ pub fn test_panic_handler(info: &PanicInfo) -> ! {
     exit_qemu(QemuExitCode::Failed);
     loop {}
 }
-
-// use core::alloc::{GlobalAlloc, Layout};
-
-// struct PanicAlloc;
-
-// unsafe impl GlobalAlloc for PanicAlloc {
-//     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-//         panic!("allocation attempted: {:?}", layout);
-//     }
-
-//     unsafe fn dealloc(&self, _: *mut u8, _: Layout) {}
-// }
-
-// #[global_allocator]
-// static A: PanicAlloc = PanicAlloc;

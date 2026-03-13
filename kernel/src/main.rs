@@ -15,9 +15,6 @@ use kernel::{
 use kernel_core::rendering::Color;
 use x86_64::VirtAddr;
 
-#[global_allocator]
-static ALLOCATOR: allocator::HeapWithTracker = allocator::HeapWithTracker::new();
-
 bootloader_api::entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // init global renderer
@@ -53,8 +50,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     };
 
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_regions) };
-    allocator::init_heap(&ALLOCATOR, &mut mapper, &mut frame_allocator)
-        .expect("heap initialization failed");
+    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
 
     kernel::hlt_loop();
 }

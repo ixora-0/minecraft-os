@@ -16,9 +16,6 @@ use x86_64::VirtAddr;
 
 use bootloader_api::info::BootInfo;
 
-#[global_allocator]
-static ALLOCATOR: allocator::HeapWithTracker = allocator::HeapWithTracker::new();
-
 bootloader_api::entry_point!(test_kernel_main, config = &kernel::BOOTLOADER_CONFIG);
 fn test_kernel_main(boot_info: &'static mut BootInfo) -> ! {
     kernel::init();
@@ -32,8 +29,7 @@ fn test_kernel_main(boot_info: &'static mut BootInfo) -> ! {
     };
 
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_regions) };
-    allocator::init_heap(&ALLOCATOR, &mut mapper, &mut frame_allocator)
-        .expect("heap initialization failed");
+    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
 
     test_main();
     kernel::hlt_loop()

@@ -6,7 +6,8 @@
 
 use core::panic::PanicInfo;
 use kernel::{serial_print, serial_println};
-use tests_integration::{QemuExitCode, exit_qemu};
+use tests_integration::exit_qemu;
+use tests_qemu_exit_code::QemuExitCode;
 
 use bootloader_api::info::BootInfo;
 
