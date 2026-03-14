@@ -8,7 +8,7 @@ use embedded_graphics::draw_target::DrawTarget;
 use kernel::{
     BOOTLOADER_CONFIG,
     allocator::{self},
-    logger::init_logger,
+    logger::{self, init_logger},
     memory::{self, BootInfoFrameAllocator},
     rendering::{GLOBAL_RENDERER, init_global_renderer},
 };
@@ -17,7 +17,25 @@ use x86_64::VirtAddr;
 
 bootloader_api::entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
-    // init global renderer
+    init_logger();
+
+    log::trace!("Initializing kernel");
+    kernel::init(); // init interrupts
+    // --- MEMORY ---
+    log::trace!("Initializing frame allocator");
+    let mut mapper = match boot_info.physical_memory_offset.into_option() {
+        Some(physical_memory_offset) => {
+            log::trace!("Physical memory offset: 0x{:X?}", physical_memory_offset);
+            unsafe { memory::init(VirtAddr::new(physical_memory_offset)) }
+        }
+        None => panic!("Physical memory offset not provided"),
+    };
+    let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_regions) };
+    log::trace!("Initializing heap");
+    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
+
+    // --- RENDERER ---
+    log::trace!("Initializing renderer");
     {
         // free the doubly wrapped framebuffer from the boot info struct
         let frame_buffer_optional = &mut boot_info.framebuffer;
@@ -29,29 +47,16 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         let framebuffer = frame_buffer_option.unwrap();
         init_global_renderer(framebuffer);
     }
-
     // clear screen
     {
         let mut renderer_guard = GLOBAL_RENDERER.lock();
         let renderer = renderer_guard.get_mut().expect("msg");
         renderer.clear(Color::BLACK);
     }
-    init_logger();
+    logger::enable_rendering();
     log::info!("Hello, World!");
 
-    kernel::init();
-    // memory
-    let mut mapper = match boot_info.physical_memory_offset.into_option() {
-        Some(physical_memory_offset) => {
-            log::trace!("Physical memory offset: 0x{:X?}", physical_memory_offset);
-            unsafe { memory::init(VirtAddr::new(physical_memory_offset)) }
-        }
-        None => panic!("Physical memory offset not provided"),
-    };
-    let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_regions) };
-    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
-
-    // acpi
+    // --- ACPI ---
     let rsdp_addr = match boot_info.rsdp_addr.into_option() {
         Some(rsdp_addr) => rsdp_addr,
         None => panic!("No RSDP was found (BIOS) or reported (UEFI)"),
