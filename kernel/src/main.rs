@@ -48,9 +48,16 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         }
         None => panic!("Physical memory offset not provided"),
     };
-
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_regions) };
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
+
+    // acpi
+    let rsdp_addr = match boot_info.rsdp_addr.into_option() {
+        Some(rsdp_addr) => rsdp_addr,
+        None => panic!("No RSDP was found (BIOS) or reported (UEFI)"),
+    };
+    kernel::acpi::init(rsdp_addr);
+    // kernel::acpi::shutdown();
 
     kernel::hlt_loop();
 }
