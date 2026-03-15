@@ -56,12 +56,26 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     logger::enable_rendering();
     log::info!("Hello, World!");
 
+    const ASCII: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\nabcdefghijklmnopqrstuvwxyz\n0123456789\n!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+    log::info!("ASCII:\n{}", ASCII);
+
     // --- ACPI ---
     let rsdp_addr = match boot_info.rsdp_addr.into_option() {
         Some(rsdp_addr) => rsdp_addr,
         None => panic!("No RSDP was found (BIOS) or reported (UEFI)"),
     };
     kernel::acpi::init(rsdp_addr);
+
+    {
+        let allocated = kernel::allocator::ALLOCATOR.get_allocated_bytes();
+        let available = allocator::HEAP_SIZE;
+        log::info!(
+            "Alocated bytes after init sequence: {} / {} ({}%)",
+            allocated,
+            available,
+            (allocated as f32 / available as f32 * 100.0) as u32
+        );
+    }
     // kernel::acpi::shutdown();
 
     kernel::hlt_loop();
