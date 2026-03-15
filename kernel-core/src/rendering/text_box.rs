@@ -1,18 +1,27 @@
 extern crate alloc;
 use alloc::vec::Vec;
 use fontdue::{Font, Metrics};
+use hashbrown::HashMap;
 
 use crate::rendering::Renderer;
 use embedded_graphics::{Pixel, draw_target::DrawTarget, geometry::Point, primitives::Rectangle};
-use spin::Once;
+use spin::{Lazy, Mutex};
 
 /// Using ascii only font to hopefully make booting faster
 static FONT_DATA: &[u8] = include_bytes!("../../../assets/ascii.ttf");
-static FONT: Once<Font> = Once::new();
-pub const FONT_SIZE: f32 = 14.0;
+static FONT: Lazy<Font> = Lazy::new(|| {
+    Font::from_bytes(FONT_DATA, fontdue::FontSettings::default()).expect("Could not load font")
+});
+
+const MAX_CACHE_ENTRIES: usize = 256;
+static GLYPH_CACHE: Lazy<Mutex<HashMap<(char, u32), (Metrics, Vec<u8>)>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+// probably should use linked list or something here. vec for now.
+static CACHE_ORDER: Mutex<Vec<(char, u32)>> = Mutex::new(Vec::new());
 
 #[derive(Clone, Copy)]
 pub struct TextBoxConfig {
+    pub size: u32, // not f32 because need to hash
     /// number of pixels to adjust the line gap
     pub line_spacing: i32,
 
@@ -27,6 +36,7 @@ pub struct TextBoxConfig {
 impl TextBoxConfig {
     pub fn default() -> Self {
         Self {
+            size: 14,
             line_spacing: 0,
             letter_spacing: 0,
             padding_left: 10,
@@ -39,20 +49,27 @@ impl TextBoxConfig {
     }
 }
 
-fn get_glyph(c: char) -> (Metrics, Vec<u8>) {
-    // TODO: cache
-    let font = get_font();
-    font.rasterize(c, FONT_SIZE)
-}
+fn get_glyph(c: char, size: u32) -> (Metrics, Vec<u8>) {
+    let size_key = size as u32;
+    let mut cache = GLYPH_CACHE.lock();
 
-fn get_font() -> &'static Font {
-    match FONT.is_completed() {
-        true => unsafe { FONT.get_unchecked() },
-        false => FONT.call_once(|| {
-            Font::from_bytes(FONT_DATA, fontdue::FontSettings::default())
-                .expect("Could not load font")
-        }),
+    // can update order here if we want LRU cache
+    if let Some(entry) = cache.get(&(c, size_key)) {
+        return entry.clone();
     }
+
+    let mut order = CACHE_ORDER.lock();
+    let entry = FONT.rasterize(c, size as f32);
+    if cache.len() >= MAX_CACHE_ENTRIES {
+        if let Some(oldest) = order.first().copied() {
+            order.remove(0);
+            cache.remove(&oldest);
+        }
+    }
+
+    order.push((c, size_key));
+    cache.insert((c, size_key), entry.clone());
+    entry
 }
 
 pub struct TextBox {
@@ -72,9 +89,8 @@ pub struct TextBox {
 impl TextBox {
     pub fn new(bounding_box: Rectangle) -> Self {
         let config = TextBoxConfig::default();
-        let font = get_font();
-        let line_metrics = font
-            .horizontal_line_metrics(FONT_SIZE)
+        let line_metrics = FONT
+            .horizontal_line_metrics(config.size as f32)
             .expect("Could not get font metrics");
 
         Self {
@@ -103,7 +119,7 @@ impl TextBox {
             '\n' => self.newline(),
             '\r' => self.carriage_return(),
             c => {
-                let (metrics, bitmap) = get_glyph(c);
+                let (metrics, bitmap) = get_glyph(c, self.config.size);
                 let advance_x = libm::ceilf(metrics.advance_width) as i32;
                 let next_cursor_x = self.cursor_x + advance_x;
                 if next_cursor_x >= self.bounding_box.size.width as i32 {
@@ -151,9 +167,9 @@ mod tests {
     #[test]
     fn test_loading_fonts() {
         use embedded_graphics::prelude::Size;
-        let font = get_font();
-        let _line_metrics = font
-            .horizontal_line_metrics(FONT_SIZE)
+        let config = TextBoxConfig::default();
+        let _line_metrics = FONT
+            .horizontal_line_metrics(config.size as f32)
             .expect("Could not get font metrics");
         let _text_box = TextBox::new(Rectangle::new(Point::new(0, 0), Size::new(100, 100)));
     }
