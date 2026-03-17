@@ -1,6 +1,7 @@
 use crate::rendering::{EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED, GLOBAL_RENDERER};
 use core::fmt;
 use embedded_graphics::primitives::Rectangle;
+use kernel_core::rendering::Color;
 
 pub struct TextBox {
     inner: kernel_core::rendering::TextBox,
@@ -11,6 +12,12 @@ impl TextBox {
         Self {
             inner: kernel_core::rendering::TextBox::new(bounding_box),
         }
+    }
+    pub fn get_foreground_color(&mut self) -> Color {
+        self.inner.get_foreground_color()
+    }
+    pub fn set_foreground_color(&mut self, color: Color) {
+        self.inner.set_foreground_color(color);
     }
 }
 

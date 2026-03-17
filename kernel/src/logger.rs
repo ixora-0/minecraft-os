@@ -1,4 +1,5 @@
 use core::fmt::Write;
+use log::Level;
 use spin::Mutex;
 use x86_64::instructions::interrupts;
 
@@ -6,6 +7,7 @@ use crate::rendering::TextBox;
 use crate::serial_println;
 use embedded_graphics::geometry::{Point, Size};
 use embedded_graphics::primitives::Rectangle;
+use kernel_core::rendering::Color;
 
 pub static LOGGER: TextBoxLogger = TextBoxLogger::default();
 
@@ -41,7 +43,17 @@ impl log::Log for TextBoxLogger {
         serial_println!("{:5}: {}", record.level(), record.args());
         interrupts::without_interrupts(|| {
             if let Some(text_box) = self.text_box.lock().as_mut() {
+                let prev_color = text_box.get_foreground_color();
+                let color = match record.level() {
+                    Level::Error => Color::RED,
+                    Level::Warn => Color::YELLOW,
+                    Level::Info => Color::WHITE,
+                    Level::Debug => Color::LIGHT_GRAY,
+                    Level::Trace => Color::DARK_GRAY,
+                };
+                text_box.set_foreground_color(color);
                 writeln!(text_box, "{:5}: {}", record.level(), record.args()).unwrap();
+                text_box.set_foreground_color(prev_color);
             }
         });
     }

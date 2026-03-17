@@ -1,10 +1,10 @@
 use bootloader_api::info::{FrameBuffer, FrameBufferInfo, PixelFormat};
 use embedded_graphics::{
-    Pixel,
     draw_target::DrawTarget,
     geometry::{Dimensions, OriginDimensions, Size},
-    pixelcolor::{PixelColor, raw::RawU24},
+    pixelcolor::{raw::RawU24, PixelColor},
     primitives::Rectangle,
+    Pixel,
 };
 
 pub mod text_box;
@@ -26,6 +26,36 @@ impl Color {
         red: 255,
         green: 255,
         blue: 255,
+    };
+    pub const RED: Color = Color {
+        red: 255,
+        green: 0,
+        blue: 0,
+    };
+    pub const YELLOW: Color = Color {
+        red: 255,
+        green: 255,
+        blue: 0,
+    };
+    pub const GREEN: Color = Color {
+        red: 0,
+        green: 255,
+        blue: 0,
+    };
+    pub const CYAN: Color = Color {
+        red: 0,
+        green: 255,
+        blue: 255,
+    };
+    pub const LIGHT_GRAY: Color = Color {
+        red: 180,
+        green: 180,
+        blue: 180,
+    };
+    pub const DARK_GRAY: Color = Color {
+        red: 120,
+        green: 120,
+        blue: 120,
     };
     pub fn with_intensity(&self, intensity: u8) -> Color {
         Color {

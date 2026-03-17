@@ -136,6 +136,12 @@ impl TextBox {
             }
         }
     }
+    pub fn get_foreground_color(&mut self) -> super::Color {
+        self.config.color_fg
+    }
+    pub fn set_foreground_color(&mut self, color: super::Color) {
+        self.config.color_fg = color;
+    }
 
     fn render_char(&self, metrics: Metrics, bitmap: Vec<u8>, renderer: &mut Renderer) {
         let tx = self.bounding_box.top_left.x as i32 + self.cursor_x + metrics.xmin;
