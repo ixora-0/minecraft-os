@@ -37,9 +37,7 @@ pub fn init() {
     gdt::init();
     interrupts::init_idt();
 
-    // only handle keyboard interrupts
-    // NOTE: disabling PIT interrupts. this is relevant for BIOS only.
-    let (mask1, mask2) = build_pic_masks(&[1]);
+    let (mask1, mask2) = build_pic_masks(&[0, 1]);
     unsafe {
         let mut pics = interrupts::PICS.lock();
         pics.initialize();

@@ -19,6 +19,8 @@ lazy_static! {
         }
         idt.page_fault.set_handler_fn(page_fault_handler);
         // interrupts
+        idt[InterruptIndex::Timer.as_u8()]
+            .set_handler_fn(timer_interrupt_handler);
         idt[InterruptIndex::Keyboard.as_u8()]
             .set_handler_fn(keyboard_interrupt_handler);
         idt
@@ -70,6 +72,13 @@ pub enum InterruptIndex {
 impl InterruptIndex {
     fn as_u8(self) -> u8 {
         self as u8
+    }
+}
+
+extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        PICS.lock()
+            .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
     }
 }
 
