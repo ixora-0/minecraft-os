@@ -141,21 +141,37 @@ pub fn init(rsdp_addr: u64) {
             }
         }
     };
-    let platform = match AcpiPlatform::new(tables_for_aml, handler) {
+    let _platform = match AcpiPlatform::new(tables_for_aml, handler) {
         Ok(p) => p,
         Err(e) => {
             log::error!("Failed to create AcpiPlatform: {:?}", e);
             return;
         }
     };
-    let interpreter = match aml::Interpreter::new_from_platform(&platform) {
-        Ok(i) => i,
-        Err(e) => {
-            log::error!("Failed to create AML interpreter: {:?}", e);
-            return;
+    // let interpreter = match aml::Interpreter::new_from_platform(&platform) {
+    //     Ok(i) => i,
+    //     Err(e) => {
+    //         log::error!("Failed to create AML interpreter: {:?}", e);
+    //         return;
+    //     }
+    // };
+    // AML_INTERPRETER.call_once(|| interpreter);
+}
+
+pub fn has_ps2_controller() -> bool {
+    match FADT_MAPPING.get() {
+        Some(fadt_mapping) => {
+            let fadt_locked = fadt_mapping.lock();
+            let fadt = fadt_locked.get();
+            let iapc_boot_arch = fadt.iapc_boot_arch;
+            iapc_boot_arch.motherboard_implements_8042()
         }
-    };
-    AML_INTERPRETER.call_once(|| interpreter);
+        None => {
+            // no ACPI, assume PS/2 exists
+            log::warn!("No FADT found, assuming PS/2 controller exists");
+            true
+        }
+    }
 }
 
 pub fn shutdown() {

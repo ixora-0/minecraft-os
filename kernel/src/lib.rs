@@ -9,6 +9,7 @@ pub mod gdt;
 pub mod interrupts;
 pub mod logger;
 pub mod memory;
+pub mod ps2;
 pub mod rendering;
 pub mod serial;
 
@@ -43,7 +44,6 @@ pub fn init() {
         pics.initialize();
         pics.write_masks(mask1, mask2);
     }
-    x86_64::instructions::interrupts::enable();
 }
 pub fn hlt_loop() -> ! {
     loop {

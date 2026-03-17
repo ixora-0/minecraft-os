@@ -66,6 +66,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     };
     kernel::acpi::init(rsdp_addr);
 
+    kernel::ps2::init();
+
     {
         let allocated = kernel::allocator::ALLOCATOR.get_allocated_bytes();
         let available = allocator::HEAP_SIZE;
@@ -76,8 +78,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             (allocated as f32 / available as f32 * 100.0) as u32
         );
     }
-    // kernel::acpi::shutdown();
 
+    x86_64::instructions::interrupts::enable();
+    // kernel::acpi::shutdown();
+    log::trace!("Entering loop");
     kernel::hlt_loop();
 }
 
