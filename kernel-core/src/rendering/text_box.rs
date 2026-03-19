@@ -2,7 +2,7 @@ extern crate alloc;
 use core::{cmp::min, ops::Index, ops::Range};
 
 use super::Color;
-use alloc::vec::Vec;
+use alloc::{sync::Arc, vec::Vec};
 use fontdue::{Font, Metrics};
 use hashbrown::HashMap;
 
@@ -17,19 +17,19 @@ static FONT: Lazy<Font> = Lazy::new(|| {
 });
 
 const MAX_CACHE_ENTRIES: usize = 256;
-static GLYPH_CACHE: Lazy<Mutex<HashMap<(char, u32), (Metrics, Vec<u8>)>>> =
+static GLYPH_CACHE: Lazy<Mutex<HashMap<(char, u32), Arc<(Metrics, Vec<u8>)>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 // probably should use linked list or something here. vec for now.
 static CACHE_ORDER: Mutex<Vec<(char, u32)>> = Mutex::new(Vec::new());
 
 /// returns metric and bitmap of glyph from FONT
-fn get_raster(c: char, size: u32) -> (Metrics, Vec<u8>) {
+fn get_raster(c: char, size: u32) -> Arc<(Metrics, Vec<u8>)> {
     let size_key = size as u32;
     let mut cache = GLYPH_CACHE.lock();
 
     // can update order here if we want LRU cache
     if let Some(entry) = cache.get(&(c, size_key)) {
-        return entry.clone();
+        return Arc::clone(entry);
     }
 
     let mut order = CACHE_ORDER.lock();
@@ -41,8 +41,9 @@ fn get_raster(c: char, size: u32) -> (Metrics, Vec<u8>) {
         }
     }
 
+    let entry = Arc::new(entry);
     order.push((c, size_key));
-    cache.insert((c, size_key), entry.clone());
+    cache.insert((c, size_key), Arc::clone(&entry));
     entry
 }
 
@@ -373,9 +374,9 @@ impl TextBox {
     /// update the last visual line based on the last pushed glyph
     /// must be ran after pushing every glyph to keep visual lines accurate
     fn update_last_line_layout(&mut self, pushed_glyph: Glyph) {
-        // don't need to use Font::metrics(), we're going to use the bitmap from cache when rendering anyways
-        let (metrics, _bitmap) = get_raster(pushed_glyph.printable_char(), self.config.font_size);
-        let advance = self.calc_advance(&metrics);
+        let glyph_data = get_raster(pushed_glyph.printable_char(), self.config.font_size);
+        let (metrics, _bitmap) = glyph_data.as_ref();
+        let advance = self.calc_advance(metrics);
 
         // visual lines shouldn't be empty, just unwrap
         let last_visual_line = self.visual_lines.last_mut().unwrap();
@@ -421,9 +422,10 @@ impl TextBox {
             let mut x = self.config.padding_left;
             let visual_line = visual_line_slice(line, &self.buffer);
             for glyph in visual_line {
-                let (metrics, bitmap) = get_raster(glyph.printable_char(), self.config.font_size);
-                self.render_char(&bitmap, metrics, glyph.style.color_text, x, y, renderer);
-                x += self.calc_advance(&metrics);
+                let glyph_data = get_raster(glyph.printable_char(), self.config.font_size);
+                let (metrics, bitmap) = glyph_data.as_ref();
+                self.render_char(bitmap, *metrics, glyph.style.color_text, x, y, renderer);
+                x += self.calc_advance(metrics);
             }
             y -= self.line_height + self.config.line_spacing;
         }
