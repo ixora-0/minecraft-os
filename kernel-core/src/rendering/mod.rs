@@ -1,10 +1,11 @@
 use bootloader_api::info::{FrameBuffer, FrameBufferInfo, PixelFormat};
+use core::fmt;
 use embedded_graphics::{
+    Pixel,
     draw_target::DrawTarget,
     geometry::{Dimensions, OriginDimensions, Size},
-    pixelcolor::{raw::RawU24, PixelColor},
+    pixelcolor::{PixelColor, raw::RawU24},
     primitives::Rectangle,
-    Pixel,
 };
 
 pub mod text_box;
@@ -67,6 +68,16 @@ impl Color {
     pub fn to_gray(&self) -> u8 {
         self.red / 3 + self.green / 3 + self.blue / 3
     }
+    pub fn parse_hex(hex: &str) -> Option<Color> {
+        let hex = hex.strip_prefix('#')?;
+        let num = u32::from_str_radix(hex, 16).ok()?;
+        // RGB format in bits: 00000000 RRRRRRRR GGGGGGGG BBBBBBBB
+        Some(Color {
+            red: (num >> 16) as u8,
+            green: (num >> 8) as u8,
+            blue: num as u8,
+        })
+    }
     pub fn write_to(&self, chunk: &mut [u8], format: PixelFormat) {
         match format {
             PixelFormat::Rgb => {
@@ -85,7 +96,26 @@ impl Color {
             other => panic!("unknown pixel format {other:?}"),
         }
     }
+
+    pub fn fg(&self) -> Fg<'_> {
+        Fg(self)
+    }
 }
+
+pub struct Fg<'a>(&'a Color);
+impl fmt::Display for Fg<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let c = self.0;
+        // custom control protocol
+        // format:
+        // ESC ~ <COMMAND> BEL
+        //
+        // set foreground format
+        // ESC ~ FG#RRGGBB BEL
+        write!(f, "\x1B~FG#{:02X}{:02X}{:02X}\x07", c.red, c.green, c.blue)
+    }
+}
+
 impl PixelColor for Color {
     type Raw = RawU24;
 }

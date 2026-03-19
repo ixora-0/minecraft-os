@@ -486,6 +486,7 @@ dependencies = [
  "fontdue",
  "hashbrown 0.16.1",
  "libm",
+ "log",
  "spin 0.10.0",
 ]
 

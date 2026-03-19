@@ -1,7 +1,7 @@
-use crate::rendering::{EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED, GLOBAL_RENDERER};
 use core::fmt;
 use embedded_graphics::primitives::Rectangle;
 use kernel_core::rendering::Color;
+use kernel_core::rendering::Renderer;
 
 pub struct TextBox {
     inner: kernel_core::rendering::TextBox,
@@ -13,22 +13,19 @@ impl TextBox {
             inner: kernel_core::rendering::TextBox::new(bounding_box),
         }
     }
-    pub fn get_foreground_color(&mut self) -> Color {
-        self.inner.get_foreground_color()
+    pub fn render(&mut self, renderer: &mut Renderer) {
+        self.inner.render(renderer);
     }
-    pub fn set_foreground_color(&mut self, color: Color) {
-        self.inner.set_foreground_color(color);
+    pub fn get_current_text_color(&mut self) -> Color {
+        self.inner.get_current_text_color()
     }
 }
 
 impl fmt::Write for TextBox {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        let mut renderer_guard = GLOBAL_RENDERER.lock();
-        let mut renderer = renderer_guard
-            .get_mut()
-            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
-        for c in s.chars() {
-            self.inner.write_char(c, &mut renderer);
+        // only pushing bytes to text box, not rendering
+        for b in s.bytes() {
+            self.inner.push_byte(b);
         }
         Ok(())
     }

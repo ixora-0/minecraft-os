@@ -51,7 +51,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     {
         let mut renderer_guard = GLOBAL_RENDERER.lock();
         let renderer = renderer_guard.get_mut().expect("msg");
-        renderer.clear(Color::BLACK);
+        renderer.clear(Color::LIGHT_GRAY);
     }
     logger::enable_rendering();
     log::info!("Hello, World!");

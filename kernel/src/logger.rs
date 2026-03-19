@@ -3,7 +3,7 @@ use log::Level;
 use spin::Mutex;
 use x86_64::instructions::interrupts;
 
-use crate::rendering::TextBox;
+use crate::rendering::{self, EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED, TextBox};
 use crate::serial_println;
 use embedded_graphics::geometry::{Point, Size};
 use embedded_graphics::primitives::Rectangle;
@@ -27,7 +27,7 @@ impl TextBoxLogger {
     pub fn enable_rendering(&self) {
         let text_box = TextBox::new(Rectangle {
             top_left: Point::new(50, 10),
-            size: Size::new(1000, 700),
+            size: Size::new(700, 700),
         });
         let mut text_box_ref = self.text_box.lock();
         *text_box_ref = Some(text_box);
@@ -41,9 +41,11 @@ impl log::Log for TextBoxLogger {
 
     fn log(&self, record: &log::Record) {
         serial_println!("{:5}: {}", record.level(), record.args());
+
+        let mut need_flush = false;
         interrupts::without_interrupts(|| {
             if let Some(text_box) = self.text_box.lock().as_mut() {
-                let prev_color = text_box.get_foreground_color();
+                let prev_color = text_box.get_current_text_color();
                 let color = match record.level() {
                     Level::Error => Color::RED,
                     Level::Warn => Color::YELLOW,
@@ -51,14 +53,35 @@ impl log::Log for TextBoxLogger {
                     Level::Debug => Color::LIGHT_GRAY,
                     Level::Trace => Color::DARK_GRAY,
                 };
-                text_box.set_foreground_color(color);
-                writeln!(text_box, "{:5}: {}", record.level(), record.args()).unwrap();
-                text_box.set_foreground_color(prev_color);
+                writeln!(
+                    text_box,
+                    "{}{:5}: {}{}",
+                    color.fg(),
+                    record.level(),
+                    record.args(),
+                    prev_color.fg()
+                )
+                .unwrap();
+                need_flush = true;
             }
         });
+
+        if need_flush {
+            self.flush();
+        }
     }
 
-    fn flush(&self) {}
+    fn flush(&self) {
+        interrupts::without_interrupts(|| {
+            if let Some(text_box) = self.text_box.lock().as_mut() {
+                let mut renderer_guard = rendering::GLOBAL_RENDERER.lock();
+                let renderer = renderer_guard
+                    .get_mut()
+                    .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+                text_box.render(renderer);
+            }
+        })
+    }
 }
 
 pub fn init_logger() {
