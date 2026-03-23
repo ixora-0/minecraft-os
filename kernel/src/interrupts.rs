@@ -23,6 +23,8 @@ lazy_static! {
             .set_handler_fn(timer_interrupt_handler);
         idt[InterruptIndex::Keyboard.as_u8()]
             .set_handler_fn(keyboard_interrupt_handler);
+        idt[InterruptIndex::Mouse.as_u8()]
+            .set_handler_fn(mouse_interrupt_handler);
         idt
     };
 }
@@ -64,9 +66,10 @@ pub static PICS: spin::Mutex<ChainedPics> =
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
-pub enum InterruptIndex {
+enum InterruptIndex {
     Timer = PIC_1_OFFSET,
     Keyboard,
+    Mouse = PIC_2_OFFSET + 4,
 }
 
 impl InterruptIndex {
@@ -95,10 +98,19 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
                 HandleControl::Ignore
             ));
     }
-
     let mut keyboard = KEYBOARD.lock();
-    let mut port = Port::new(0x60);
 
+    let mut status_port = Port::new(0x64);
+    let status: u8 = unsafe { status_port.read() };
+    if status & 0x01 == 0 {
+        unsafe {
+            PICS.lock()
+                .notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
+        }
+        return;
+    }
+
+    let mut port = Port::new(0x60);
     let scancode: u8 = unsafe { port.read() };
     if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
         keyboard.process_keyevent(key_event.clone());
@@ -108,5 +120,29 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
     unsafe {
         PICS.lock()
             .notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
+    }
+}
+
+extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    use x86_64::instructions::port::Port;
+
+    let mut status_port = Port::new(0x64);
+    let status: u8 = unsafe { status_port.read() };
+    if status & 0x01 == 0 {
+        unsafe {
+            PICS.lock()
+                .notify_end_of_interrupt(InterruptIndex::Mouse.as_u8());
+        }
+        return;
+    }
+
+    let mut port = Port::new(0x60);
+    let mouse_data: u8 = unsafe { port.read() };
+    let mut mouse = crate::ps2::mouse::PS2_MOUSE.lock();
+    mouse.handle_interrupt(mouse_data);
+
+    unsafe {
+        PICS.lock()
+            .notify_end_of_interrupt(InterruptIndex::Mouse.as_u8());
     }
 }

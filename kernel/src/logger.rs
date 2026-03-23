@@ -27,7 +27,7 @@ impl TextBoxLogger {
     pub fn enable_rendering(&self) {
         let text_box = TextBox::new(Rectangle {
             top_left: Point::new(50, 10),
-            size: Size::new(700, 700),
+            size: Size::new(700, 350),
         });
         let mut text_box_ref = self.text_box.lock();
         *text_box_ref = Some(text_box);
