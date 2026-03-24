@@ -1,7 +1,12 @@
 use core::fmt::Debug;
 use x86_64::instructions::port::Port;
 
+pub mod keyboard;
 pub mod mouse;
+
+use crate::ps2::keyboard::KeyboardType;
+
+pub use self::keyboard::{PS2_KEYBOARD, ScancodeSet};
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
@@ -21,10 +26,11 @@ pub enum Ps2Command {
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
 pub enum KeyboardCommand {
-    Reset = 0xFF,
-    DisableScanning = 0xF5,
+    Scancode = 0xF0,
     Identify = 0xF2,
     EnableScanning = 0xF4,
+    DisableScanning = 0xF5,
+    Reset = 0xFF,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -201,6 +207,7 @@ impl Ps2Controller {
         unsafe { while self.cmd.read() & 0b01 == 0 {} }
     }
 
+    /// returns false if timeout
     fn wait_output_with_timeout(&mut self) -> bool {
         unsafe {
             for _ in 0..100_000 {
@@ -415,20 +422,29 @@ pub fn init() {
         0xFA => log::trace!("PS/2 identify ack passed"),
         _ => log::warn!("identify ack failed: {:#X} (expected 0xFA)", ack),
     }
-    // read up to 2 ID bytes
-    if !ps2.wait_output_with_timeout() {
-        log::trace!("PS/2 identify byte 1: none (ancient AT keyboard)");
+    let b1 = if ps2.wait_output_with_timeout() {
+        Some(ps2.read_data())
     } else {
-        log::trace!("PS/2 identify byte 1: {:#X}", ps2.read_data());
-        if !ps2.wait_output_with_timeout() {
-            log::trace!("PS/2 identify byte 2: none");
+        None
+    };
+    let b2 = if b1.is_some() {
+        if ps2.wait_output_with_timeout() {
+            Some(ps2.read_data())
         } else {
-            log::trace!("PS/2 identify byte 2: {:#X}", ps2.read_data());
+            None
         }
+    } else {
+        None
+    };
+    match KeyboardType::from_identify_bytes(b1, b2) {
+        KeyboardType::Unknown(_, _) | KeyboardType::Invalid => {
+            log::warn!("PS/2 keyboard: Can't identify keyboard type")
+        }
+        t => log::info!("PS/2 keyboard: {:?} type detected", t),
     }
 
-    // enable scanning
     if port1_works {
+        // enable scanning
         log::trace!("PS/2: Enabling scanning");
         ps2.write_data(KeyboardCommand::EnableScanning as u8);
         let ack = ps2.read_data();
@@ -436,6 +452,53 @@ pub fn init() {
             0xFA => log::trace!("PS/2 scan enable ack passed"),
             _ => log::warn!("PS/2 scan enable ack failed: {:#X}", ack),
         }
+
+        // set scancode set
+        ps2.write_data(KeyboardCommand::Scancode as u8);
+        ps2.write_data(0x02); // subcommand, set scancode set to set 2
+        let ack = ps2.read_data();
+        match ack {
+            0xFA => log::trace!("PS/2 keyboard set scancode set 2 success"),
+            _ => log::warn!("PS/2 keyboard set scancode set 2 ack failed: {:#X}", ack),
+        }
+
+        // detect scancode set
+        let scancode_set = {
+            ps2.write_data(KeyboardCommand::Scancode as u8); // Get/set scan code set
+            ps2.write_data(0x00); // subcommand, get current set
+            let ack = ps2.read_data();
+            match ack {
+                0xFA => log::trace!("PS/2 keyboard get scancode set ack passed"),
+                _ => log::warn!("PS/2 keyboard get scancode set ack failed: {:#X}", ack),
+            }
+
+            let scancode_set_id = loop {
+                // some hardware gives additional ack, we ignore it
+                let b = ps2.read_data();
+                if b != 0xFA {
+                    break b;
+                }
+            };
+            log::debug!(
+                "PS/2 keyboard: Detected scancode set ID: {:#X}",
+                scancode_set_id
+            );
+            match scancode_set_id {
+                0x43 | 0x01 => ScancodeSet::Set1,
+                0x41 | 0x02 => ScancodeSet::Set2,
+                0x3F | 0x03 => ScancodeSet::Set3,
+                _ => ScancodeSet::Unknown,
+            }
+        };
+        match scancode_set {
+            keyboard::ScancodeSet::Set1 => log::info!("PS/2 keyboard: Using scancode set 1"),
+            keyboard::ScancodeSet::Set2 => log::info!("PS/2 keyboard: Using scancode set 2"),
+            keyboard::ScancodeSet::Set3 => log::info!("PS/2 keyboard: Using scancode set 3"),
+            keyboard::ScancodeSet::Unknown => log::warn!("PS/2 keyboard: Unknown scancode set"),
+        }
+
+        // *keyboard::PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::new(scancode_set);
+        *keyboard::PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::new(scancode_set);
     }
 
     if port2_works {

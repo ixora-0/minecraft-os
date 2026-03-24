@@ -86,19 +86,7 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
 }
 
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    use pc_keyboard::{HandleControl, Keyboard, ScancodeSet1, layouts};
-    use spin::Mutex;
     use x86_64::instructions::port::Port;
-
-    lazy_static! {
-        static ref KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> =
-            Mutex::new(Keyboard::new(
-                ScancodeSet1::new(),
-                layouts::Us104Key,
-                HandleControl::Ignore
-            ));
-    }
-    let mut keyboard = KEYBOARD.lock();
 
     let mut status_port = Port::new(0x64);
     let status: u8 = unsafe { status_port.read() };
@@ -112,10 +100,10 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
 
     let mut port = Port::new(0x60);
     let scancode: u8 = unsafe { port.read() };
-    if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
-        keyboard.process_keyevent(key_event.clone());
-        log::trace!("{:?}, modifiers: {:?}", key_event, keyboard.get_modifiers());
-    }
+
+    crate::ps2::keyboard::PS2_KEYBOARD
+        .lock()
+        .handle_interrupt(scancode);
 
     unsafe {
         PICS.lock()
