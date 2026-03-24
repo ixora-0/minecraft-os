@@ -605,6 +605,7 @@ name = "minecraft-os"
 version = "0.1.0"
 dependencies = [
  "bootloader",
+ "bootloader-boot-config",
  "kernel",
  "ovmf-prebuilt",
  "tests-qemu-exit-code",

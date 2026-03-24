@@ -1,4 +1,6 @@
+use bootloader::BootConfig;
 use bootloader::DiskImageBuilder;
+use bootloader_boot_config::LevelFilter;
 use ovmf_prebuilt::{Arch, FileType, Prebuilt, Source};
 use std::{
     env,
@@ -27,7 +29,12 @@ fn main() {
     let uefi_img = out_dir.join(format!("{}-uefi.img", compiled_binary_name));
 
     // build bootable image
-    let builder = DiskImageBuilder::new(compiled_binary);
+    let mut builder = DiskImageBuilder::new(compiled_binary);
+    let mut config = BootConfig::default();
+    config.log_level = LevelFilter::Warn;
+    config.frame_buffer_logging = false;
+    config.serial_logging = false;
+    builder.set_boot_config(&config);
     println!("Building uefi image to {}", uefi_img.display());
     builder.create_uefi_image(&uefi_img).unwrap();
 
