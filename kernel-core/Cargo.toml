@@ -1,13 +1,13 @@
 [package]
 name = "kernel-core"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 
 [dependencies]
-bootloader_api = "0.11.15"
-embedded-graphics = "0.8.2"
-fontdue = { version = "0.9.3", default-features = false, features = ["hashbrown"] }
-hashbrown = "0.16.1"
-libm = "0.2.16"
-spin = "0.10.0"
-log = { version = "0.4.17", default-features = false }
+bootloader_api.workspace = true
+embedded-graphics.workspace = true
+fontdue.workspace = true
+hashbrown.workspace = true
+libm.workspace = true
+spin.workspace = true
+log.workspace = true

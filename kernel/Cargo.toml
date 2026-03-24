@@ -2,7 +2,7 @@ cargo-features = ["per-package-target"]
 
 [package]
 name = "kernel"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 default-target = "x86_64-unknown-none"
 
@@ -10,21 +10,22 @@ default-target = "x86_64-unknown-none"
 name = "kernel"
 test = false
 bench = false
+
 [lib]
 test = false
 doctest = false
 
 [dependencies]
 kernel-core = { path = "../kernel-core" }
-x86_64 = "0.15.4"
-bootloader_api = "0.11.15"
-embedded-graphics = "0.8.2"
-log = { version = "0.4.17", default-features = false }
-conquer-once = { version = "0.4.0", default-features = false }
-spin = "0.10.0"
-lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
-uart_16550 = "0.2.19"
-pic8259 = "0.11.0"
-pc-keyboard = "0.8.0"
-linked_list_allocator = "0.10.5"
-acpi = "6.1.1"
+x86_64.workspace = true
+bootloader_api.workspace = true
+embedded-graphics.workspace = true
+log.workspace = true
+conquer-once.workspace = true
+spin.workspace = true
+lazy_static.workspace = true
+uart_16550.workspace = true
+pic8259.workspace = true
+pc-keyboard.workspace = true
+linked_list_allocator.workspace = true
+acpi.workspace = true

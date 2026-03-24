@@ -1,19 +1,43 @@
 [package]
 name = "minecraft-os"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 default-run = "qemu-uefi"
 
 [workspace]
 members = ["kernel", "kernel-core", "tests-integration", "tests-qemu-exit-code"]
-default-members = ["kernel", "kernel-core"]  # default for cargo run and cargo test
+default-members = ["kernel", "kernel-core"]
+
+[workspace.package]
+version = "0.1.0"
+
+[workspace.dependencies]
+bootloader = "0.11.3"
+ovmf-prebuilt = "0.2.7"
+wait-timeout = "0.1.5"
+x86_64 = "0.15.4"
+bootloader_api = "0.11.15"
+embedded-graphics = "0.8.2"
+log = { version = "0.4.17", default-features = false }
+conquer-once = { version = "0.4.0", default-features = false }
+spin = "0.10.0"
+lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+uart_16550 = "0.2.19"
+pic8259 = "0.11.0"
+pc-keyboard = "0.8.0"
+linked_list_allocator = "0.10.5"
+acpi = "6.1.1"
+fontdue = { version = "0.9.3", default-features = false, features = ["hashbrown"] }
+hashbrown = "0.16.1"
+libm = "0.2.16"
+volatile = "0.6.1"
 
 [build-dependencies]
 kernel = { path = "kernel", artifact = "bin", target = "x86_64-unknown-none" }
-bootloader = "0.11.3"
+bootloader.workspace = true
 
 [dependencies]
-ovmf-prebuilt = "0.2.7"
-bootloader = "0.11.3"
-wait-timeout = "0.1.5"
+ovmf-prebuilt.workspace = true
+bootloader.workspace = true
+wait-timeout.workspace = true
 tests-qemu-exit-code = { path = "tests-qemu-exit-code" }
