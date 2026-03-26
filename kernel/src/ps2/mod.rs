@@ -527,20 +527,14 @@ pub fn init() {
             _ => log::warn!("PS/2 mouse enable reporting ack failed: {:#X}", ack),
         }
 
-        ps2.send_command(Ps2Command::SendToMouse);
-        ps2.write_data(MouseCommand::ReadDeviceType as u8);
-        let ack = ps2.read_data();
-        match ack {
-            0xFA => log::trace!("PS/2 mouse identify ack passed"),
-            _ => log::warn!("PS/2 mouse identify ack failed: {:#X}", ack),
-        }
-        if ps2.wait_output_with_timeout() {
-            let mouse_id = ps2.read_data();
-            match mouse_id {
-                0x00 => log::info!("PS/2 mouse: Standard PS/2 mouse detected"),
-                0x03 => log::info!("PS/2 mouse: Mouse with scrollwheel detected"),
-                0x04 => log::info!("PS/2 mouse: 5-button mouse detected"),
-                _ => log::warn!("PS/2 mouse: Unknown type ID: {:#X}", mouse_id),
+        ps2.send_mouse_command(MouseCommand::ReadDeviceType);
+        ps2.log_ack("mouse identify");
+        if let Some(mouse_id) = ps2.read_with_timeout() {
+            match mouse::MouseType::from_type_id(mouse_id) {
+                mouse::MouseType::Unknown => {
+                    log::warn!("PS/2 momuse: Can't identify mouse type")
+                }
+                t => log::info!("PS/2 mouse: {:?} type detected", t),
             }
             self::mouse::PS2_MOUSE.lock().set_mouse_type(mouse_id);
         }

@@ -78,6 +78,17 @@ pub enum MouseType {
     Unknown = 0xFF,
 }
 
+impl MouseType {
+    pub fn from_type_id(type_id: u8) -> Self {
+        match type_id {
+            0x00 => MouseType::Standard,
+            0x03 => MouseType::Intellimouse,
+            0x04 => MouseType::Explorer,
+            _ => MouseType::Unknown,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Ps2Mouse {
     pub x: i16,
@@ -103,12 +114,7 @@ impl const Default for Ps2Mouse {
 
 impl Ps2Mouse {
     pub fn set_mouse_type(&mut self, type_id: u8) {
-        self.mouse_type = match type_id {
-            0x00 => MouseType::Standard,
-            0x03 => MouseType::Intellimouse,
-            0x04 => MouseType::Explorer,
-            _ => MouseType::Unknown,
-        };
+        self.mouse_type = MouseType::from_type_id(type_id);
     }
 
     pub fn handle_interrupt(&mut self, data: u8) -> Option<MousePacket> {
