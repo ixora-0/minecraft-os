@@ -302,12 +302,11 @@ pub fn init() {
     // step 7: determine if there are 2 channels
     log::trace!("PS/2 init step 7/10: Checking for dual channel");
     ps2.send_command(Ps2Command::EnableSecondPort);
-    let mut config = Ps2Config::from_byte(ps2.read_config());
     // clock should be enabled since we just sent the command to enable the second port
     let is_dual_channel = config.irq12_enabled();
     log::info!("PS/2 dual channel: {}", is_dual_channel);
+    ps2.send_command(Ps2Command::DisableSecondPort);
     if is_dual_channel {
-        ps2.send_command(Ps2Command::DisableSecondPort);
         config.set_irq12(false);
         config.set_second_port_clock(true);
         ps2.write_config(config.to_byte());
@@ -355,12 +354,8 @@ pub fn init() {
         }
     }
 
-    // flush output buffer before enabling devices to avoid spurious interrupts
-    ps2.flush_buffer();
-
     // step 9: enable devices
     log::trace!("PS/2 init step 9/10: Enabling devices");
-    let mut config = Ps2Config::from_byte(ps2.read_config());
     if port1_works {
         ps2.send_command(Ps2Command::EnableFirstPort);
         config.set_irq1(true);
@@ -444,17 +439,11 @@ pub fn init() {
     }
 
     if port1_works {
-        // enable scanning
-        log::trace!("PS/2: Enabling scanning");
-        ps2.write_data(KeyboardCommand::EnableScanning as u8);
-        let ack = ps2.read_data();
-        match ack {
-            0xFA => log::trace!("PS/2 scan enable ack passed"),
-            _ => log::warn!("PS/2 scan enable ack failed: {:#X}", ack),
-        }
-
         // set scancode set
         ps2.write_data(KeyboardCommand::Scancode as u8);
+        let ack = ps2.read_data();
+        assert_eq!(ack, 0xFA);
+
         ps2.write_data(0x02); // subcommand, set scancode set to set 2
         let ack = ps2.read_data();
         match ack {
@@ -465,6 +454,9 @@ pub fn init() {
         // detect scancode set
         let scancode_set = {
             ps2.write_data(KeyboardCommand::Scancode as u8); // Get/set scan code set
+            let ack = ps2.read_data();
+            assert_eq!(ack, 0xFA);
+
             ps2.write_data(0x00); // subcommand, get current set
             let ack = ps2.read_data();
             match ack {
@@ -472,17 +464,7 @@ pub fn init() {
                 _ => log::warn!("PS/2 keyboard get scancode set ack failed: {:#X}", ack),
             }
 
-            let scancode_set_id = loop {
-                // some hardware gives additional ack, we ignore it
-                let b = ps2.read_data();
-                if b != 0xFA {
-                    break b;
-                }
-            };
-            log::debug!(
-                "PS/2 keyboard: Detected scancode set ID: {:#X}",
-                scancode_set_id
-            );
+            let scancode_set_id = ps2.read_data();
             match scancode_set_id {
                 0x43 | 0x01 => ScancodeSet::Set1,
                 0x41 | 0x02 => ScancodeSet::Set2,
@@ -491,14 +473,22 @@ pub fn init() {
             }
         };
         match scancode_set {
-            keyboard::ScancodeSet::Set1 => log::info!("PS/2 keyboard: Using scancode set 1"),
-            keyboard::ScancodeSet::Set2 => log::info!("PS/2 keyboard: Using scancode set 2"),
-            keyboard::ScancodeSet::Set3 => log::info!("PS/2 keyboard: Using scancode set 3"),
+            keyboard::ScancodeSet::Set1 => log::info!("PS/2 keyboard is using scancode set 1"),
+            keyboard::ScancodeSet::Set2 => log::info!("PS/2 keyboard is using scancode set 2"),
+            keyboard::ScancodeSet::Set3 => log::info!("PS/2 keyboard is using scancode set 3"),
             keyboard::ScancodeSet::Unknown => log::warn!("PS/2 keyboard: Unknown scancode set"),
         }
+        // we will re enable translation, and so we'd be always reading set 1 regardless
+        *keyboard::PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::new(keyboard::ScancodeSet::Set1);
 
-        // *keyboard::PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::new(scancode_set);
-        *keyboard::PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::new(scancode_set);
+        // enable scanning
+        log::trace!("PS/2: Enabling scanning");
+        ps2.write_data(KeyboardCommand::EnableScanning as u8);
+        let ack = ps2.read_data();
+        match ack {
+            0xFA => log::trace!("PS/2 scan enable ack passed"),
+            _ => log::warn!("PS/2 scan enable ack failed: {:#X}", ack),
+        }
     }
 
     if port2_works {
@@ -564,7 +554,9 @@ pub fn init() {
         }
     }
 
-    ps2.flush_buffer();
+    // re enable translation
+    config.set_translation(true);
+    ps2.write_config(config.to_byte());
 
     log::info!(
         "PS/2 final config: {:?}",
