@@ -478,7 +478,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_loading_fonts() {
+    fn loading_fonts() {
         use embedded_graphics::prelude::Size;
         let config = TextBoxConfig::default();
         let _line_metrics = FONT

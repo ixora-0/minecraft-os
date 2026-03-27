@@ -231,7 +231,7 @@ impl<'f> OriginDimensions for Renderer<'f> {
 mod test {
     use super::*;
     #[test]
-    fn test_color_with_intensity() {
+    fn color_with_intensity() {
         // tests for overflow
         let color = Color::WHITE;
         let color_with_intensity = color.with_intensity(255);
@@ -241,7 +241,7 @@ mod test {
     }
 
     #[test]
-    fn test_clear_rgb() {
+    fn clear_rgb() {
         use bootloader_api::info::{FrameBuffer, FrameBufferInfo, PixelFormat};
         const INFO: FrameBufferInfo = FrameBufferInfo {
             byte_len: 16 * 16 * 3,
