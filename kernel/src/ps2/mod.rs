@@ -255,34 +255,74 @@ impl Ps2Controller {
             }
         }
     }
+
+    pub fn expect_ack(&mut self) -> bool {
+        self.read_data() == 0xFA
+    }
+
+    pub fn read_with_timeout(&mut self) -> Option<u8> {
+        if self.wait_output_with_timeout() {
+            Some(self.read_data())
+        } else {
+            None
+        }
+    }
+
+    fn send_keyboard_command(&mut self, cmd: KeyboardCommand) {
+        self.write_data(cmd as u8);
+    }
+
+    fn send_mouse_command(&mut self, cmd: MouseCommand) {
+        self.send_command(Ps2Command::SendToMouse);
+        self.write_data(cmd as u8);
+    }
+
+    fn log_ack(&mut self, context: &str) -> bool {
+        let ack = self.read_data();
+        match ack {
+            0xFA => {
+                log::trace!("PS/2 {} ack passed", context);
+                true
+            }
+            _ => {
+                log::warn!("PS/2 {} ack failed: {:#X} (expected 0xFA)", context, ack);
+                false
+            }
+        }
+    }
+
+    fn log_port_test(&mut self, port: u8, result: u8) {
+        match result {
+            0x00 => log::trace!("PS/2 port {} test passed", port),
+            0x01 => log::warn!("PS/2 port {} test failed: clock stuck low", port),
+            0x02 => log::warn!("PS/2 port {} test failed: clock stuck high", port),
+            0x03 => log::warn!("PS/2 port {} test failed: data stuck low", port),
+            0x04 => log::warn!("PS/2 port {} test failed: data stuck high", port),
+            _ => log::warn!("PS/2 port {} test failed: {:#04X}", port, result),
+        }
+    }
 }
 
 pub fn init() {
     let mut ps2 = Ps2Controller::new();
     // https://wiki.osdev.org/I8042_PS/2_Controller
 
-    log::trace!("PS/2 init step 2/10: Checking for PS/2 controller");
+    // step 2: check for ps/2 controller
     if !crate::acpi::has_ps2_controller() {
         log::warn!("FADT says there're no PS/2 controller");
     }
 
     // step 3: disable devices
-    log::trace!("PS/2 init step 3/10: Disabling PS/2 devices");
     ps2.send_command(Ps2Command::DisableFirstPort);
     ps2.send_command(Ps2Command::DisableSecondPort);
 
     // step 4: flush the output buffer
-    log::trace!("PS/2 init step 4/10: Flushing output buffer");
     ps2.flush_buffer();
 
     // step 5: set the controller configuration byte
-    log::trace!("PS/2 init step 5/10: Setting controller configuration byte");
     let mut config = Ps2Config::from_byte(ps2.read_config());
-    log::trace!("PS/2 initial config: {:?}", config);
     if !config.validate() {
-        log::warn!(
-            "PS/2 config is not well defined. This might mean PS/2 controller would not working properly."
-        );
+        log::warn!("PS/2 config is not well defined");
     }
     config.set_irq1(false);
     config.set_translation(false);
@@ -290,17 +330,19 @@ pub fn init() {
     ps2.write_config(config.to_byte());
 
     // step 6: perform controller self test
-    log::trace!("PS/2 init step 6/10: Performing controller self test");
-    ps2.send_command(Ps2Command::SelfTest);
-    let self_test = ps2.read_data();
-    match self_test {
-        0x55 => log::trace!("PS/2 self test passed"),
-        _ => log::warn!("PS/2 self test failed: {:#X} (expected 0x55)", self_test),
+    {
+        ps2.send_command(Ps2Command::SelfTest);
+        let self_test_res = ps2.read_data();
+        if self_test_res != 0x55 {
+            log::warn!(
+                "PS/2 self test failed: {:#X} (expected 0x55)",
+                self_test_res
+            );
+        }
+        ps2.write_config(config.to_byte());
     }
-    ps2.write_config(config.to_byte());
 
     // step 7: determine if there are 2 channels
-    log::trace!("PS/2 init step 7/10: Checking for dual channel");
     ps2.send_command(Ps2Command::EnableSecondPort);
     // clock should be enabled since we just sent the command to enable the second port
     let is_dual_channel = config.irq12_enabled();
@@ -313,220 +355,123 @@ pub fn init() {
     }
 
     // step 8: perform interface tests
-    log::trace!("PS/2 init step 8/10: Performing interface tests");
     ps2.send_command(Ps2Command::TestFirstPort);
     let port1_test = ps2.read_data();
     let port1_works = port1_test == 0x00;
-    match port1_test {
-        0x00 => log::trace!("PS/2 port 1 test passed"),
-        0x01 => log::warn!("PS/2 port 1 test failed: 0x01 (clock line stuck low) (expected 0x00)"),
-        0x02 => log::warn!("PS/2 port 1 test failed: 0x02 (clock line stuck high) (expected 0x00)"),
-        0x03 => log::warn!("PS/2 port 1 test failed: 0x03 (data line stuck low) (expected 0x00)"),
-        0x04 => log::warn!("PS/2 port 1 test failed: 0x04 (data line stuck high) (expected 0x00)"),
-        _ => log::warn!(
-            "PS/2 port 1 test failed: {:#04X} (unknown response) (expected 0x00)",
-            port1_test
-        ),
-    }
-    let mut port2_works = false;
-    if is_dual_channel {
+    ps2.log_port_test(1, port1_test);
+    let port2_works = if is_dual_channel {
         ps2.send_command(Ps2Command::TestSecondPort);
         let port2_test = ps2.read_data();
-        port2_works = port2_test == 0x00;
-        match port2_test {
-            0x00 => log::trace!("PS/2 port 2 test passed"),
-            0x01 => {
-                log::warn!("PS/2 port 2 test failed: 0x01 (clock line stuck low) (expected 0x00)")
-            }
-            0x02 => {
-                log::warn!("PS/2 port 2 test failed: 0x02 (clock line stuck high) (expected 0x00)")
-            }
-            0x03 => {
-                log::warn!("PS/2 port 2 test failed: 0x03 (data line stuck low) (expected 0x00)")
-            }
-            0x04 => {
-                log::warn!("PS/2 port 2 test failed: 0x04 (data line stuck high) (expected 0x00)")
-            }
-            _ => log::warn!(
-                "PS/2 port 2 test failed: {:#04X} (unknown response) (expected 0x00)",
-                port2_test
-            ),
-        }
-    }
+        ps2.log_port_test(2, port2_test);
+        port2_test == 0x00
+    } else {
+        false
+    };
 
     // step 9: enable devices
-    log::trace!("PS/2 init step 9/10: Enabling devices");
     if port1_works {
         ps2.send_command(Ps2Command::EnableFirstPort);
         config.set_irq1(true);
-        log::trace!("PS/2 port 1 enabled with IRQ1");
     }
     if port2_works {
         ps2.send_command(Ps2Command::EnableSecondPort);
         config.set_irq12(true);
         config.set_second_port_clock(true);
-        log::trace!("PS/2 port 2 enabled with IRQ12");
     }
     ps2.write_config(config.to_byte());
 
-    // Step 10: Reset Device
-    log::trace!("PS/2 init step 10/10: Resetting device");
-    ps2.write_data(KeyboardCommand::Reset as u8);
-    let byte1 = if ps2.wait_output_with_timeout() {
-        ps2.read_data()
-    } else {
-        log::warn!("PS/2 port 1: no device connected (timeout)");
-        log::info!(
-            "PS/2 final config: {:?}",
-            Ps2Config::from_byte(ps2.read_config())
-        );
-        return;
-    };
-    if byte1 == 0xFC {
-        log::warn!("PS/2 port 1: device self test failed, ignoring device");
-    } else {
-        let byte2 = ps2.read_data();
-        let valid = (byte1 == 0xFA && byte2 == 0xAA) || (byte1 == 0xAA && byte2 == 0xFA);
-        if valid {
-            log::trace!("PS/2 reset successful");
-        } else {
-            log::warn!(
-                "PS/2 unexpected reset response: {:#X}, {:#X} (expected 0xFA and 0xAA)",
-                byte1,
-                byte2
-            );
-        }
-    }
-
-    // identify device
-    log::trace!("PS/2: Identifying device");
-    // first disable scanning
-    ps2.write_data(KeyboardCommand::DisableScanning as u8);
-    let ack = ps2.read_data();
-    match ack {
-        0xFA => log::trace!("PS/2 disable scanning ack passed"),
-        _ => log::warn!(
-            "PS/2 disable scanning ack failed: {:#X} (expected 0xFA)",
-            ack
-        ),
-    }
-    // send identify command
-    ps2.write_data(KeyboardCommand::Identify as u8);
-    let ack = ps2.read_data();
-    match ack {
-        0xFA => log::trace!("PS/2 identify ack passed"),
-        _ => log::warn!("identify ack failed: {:#X} (expected 0xFA)", ack),
-    }
-    let b1 = if ps2.wait_output_with_timeout() {
-        Some(ps2.read_data())
-    } else {
-        None
-    };
-    let b2 = if b1.is_some() {
-        if ps2.wait_output_with_timeout() {
-            Some(ps2.read_data())
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-    match KeyboardType::from_identify_bytes(b1, b2) {
-        KeyboardType::Unknown(_, _) | KeyboardType::Invalid => {
-            log::warn!("PS/2 keyboard: Can't identify keyboard type")
-        }
-        t => log::info!("PS/2 keyboard: {:?} type detected", t),
-    }
-
     if port1_works {
-        // set scancode set
-        ps2.write_data(KeyboardCommand::Scancode as u8);
-        let ack = ps2.read_data();
-        assert_eq!(ack, 0xFA);
-
-        ps2.write_data(0x02); // subcommand, set scancode set to set 2
-        let ack = ps2.read_data();
-        match ack {
-            0xFA => log::trace!("PS/2 keyboard set scancode set 2 success"),
-            _ => log::warn!("PS/2 keyboard set scancode set 2 ack failed: {:#X}", ack),
+        // reset keyboard
+        {
+            ps2.write_data(KeyboardCommand::Reset as u8);
+            let b1 = ps2.read_with_timeout();
+            if b1.is_none() {
+                log::warn!("PS/2 port 1: no device connected (timeout)");
+            } else {
+                let b1 = b1.unwrap();
+                let b2 = ps2.read_data();
+                let valid = (b1 == 0xFA && b2 == 0xAA) || (b1 == 0xAA && b2 == 0xFA);
+                if valid {
+                    log::trace!("PS/2 reset successful");
+                } else {
+                    log::warn!("PS/2 unexpected reset response: {:#X}, {:#X}", b1, b2);
+                }
+            }
         }
+
+        // identify keyboard
+        {
+            ps2.send_keyboard_command(KeyboardCommand::DisableScanning);
+            ps2.log_ack("disable scanning");
+            ps2.send_keyboard_command(KeyboardCommand::Identify);
+            ps2.log_ack("identify");
+            let b1 = ps2.read_with_timeout();
+            let b2 = b1.and_then(|_| ps2.read_with_timeout());
+            match KeyboardType::from_identify_bytes(b1, b2) {
+                KeyboardType::Unknown(_, _) | KeyboardType::Invalid => {
+                    log::warn!("PS/2 keyboard: Can't identify keyboard type")
+                }
+                t => log::info!("PS/2 keyboard: {:?} type detected", t),
+            }
+        }
+
+        // set scancode set
+        ps2.send_keyboard_command(KeyboardCommand::Scancode);
+        ps2.log_ack("set scancode set command");
+        ps2.write_data(0x02);
+        ps2.log_ack("set scancode set 2");
 
         // detect scancode set
-        let scancode_set = {
-            ps2.write_data(KeyboardCommand::Scancode as u8); // Get/set scan code set
-            let ack = ps2.read_data();
-            assert_eq!(ack, 0xFA);
+        ps2.send_keyboard_command(KeyboardCommand::Scancode);
+        ps2.log_ack("get scancode set command");
+        ps2.write_data(0x00);
+        ps2.log_ack("get scancode set");
 
-            ps2.write_data(0x00); // subcommand, get current set
-            let ack = ps2.read_data();
-            match ack {
-                0xFA => log::trace!("PS/2 keyboard get scancode set ack passed"),
-                _ => log::warn!("PS/2 keyboard get scancode set ack failed: {:#X}", ack),
-            }
-
-            let scancode_set_id = ps2.read_data();
-            match scancode_set_id {
-                0x43 | 0x01 => ScancodeSet::Set1,
-                0x41 | 0x02 => ScancodeSet::Set2,
-                0x3F | 0x03 => ScancodeSet::Set3,
-                _ => ScancodeSet::Unknown,
+        let scancode_set_id = ps2.read_data();
+        match scancode_set_id {
+            0x43 | 0x01 => ScancodeSet::Set1,
+            0x41 | 0x02 => ScancodeSet::Set2,
+            0x3F | 0x03 => ScancodeSet::Set3,
+            id => {
+                log::warn!("PS/2 keyboard: Unknown scancode set: {:#X}", id);
+                ScancodeSet::Unknown
             }
         };
-        match scancode_set {
-            keyboard::ScancodeSet::Set1 => log::info!("PS/2 keyboard is using scancode set 1"),
-            keyboard::ScancodeSet::Set2 => log::info!("PS/2 keyboard is using scancode set 2"),
-            keyboard::ScancodeSet::Set3 => log::info!("PS/2 keyboard is using scancode set 3"),
-            keyboard::ScancodeSet::Unknown => log::warn!("PS/2 keyboard: Unknown scancode set"),
-        }
         // we will re enable translation, and so we'd be always reading set 1 regardless
         *keyboard::PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::new(keyboard::ScancodeSet::Set1);
 
         // enable scanning
-        log::trace!("PS/2: Enabling scanning");
-        ps2.write_data(KeyboardCommand::EnableScanning as u8);
-        let ack = ps2.read_data();
-        match ack {
-            0xFA => log::trace!("PS/2 scan enable ack passed"),
-            _ => log::warn!("PS/2 scan enable ack failed: {:#X}", ack),
-        }
+        ps2.send_keyboard_command(KeyboardCommand::EnableScanning);
+        ps2.log_ack("enable scanning");
     }
 
     if port2_works {
-        log::trace!("PS/2: Initializing mouse");
-
-        ps2.send_command(Ps2Command::SendToMouse);
-        ps2.write_data(MouseCommand::Reset as u8);
+        // reset mouse
+        ps2.send_mouse_command(MouseCommand::Reset);
         let ack = ps2.read_data();
         match ack {
-            0xFA => log::trace!("PS/2 mouse reset ack passed"),
             0xFE => log::warn!("PS/2 mouse resend request"),
+            0xFA => {}
             _ => log::warn!("PS/2 mouse reset ack failed: {:#X}", ack),
         }
-        if !ps2.wait_output_with_timeout() {
-            log::warn!("PS/2 mouse: no response after reset");
-        } else {
-            let reset_result = ps2.read_data();
+        if let Some(reset_result) = ps2.read_with_timeout() {
             match reset_result {
                 0xAA => log::trace!("PS/2 mouse self test passed"),
                 0xFC => log::warn!("PS/2 mouse self test failed"),
                 _ => log::warn!("PS/2 mouse reset result: {:#X}", reset_result),
             }
             // Read device ID (mouse sends 0x00 after self-test result)
-            if ps2.wait_output_with_timeout() {
-                let device_id = ps2.read_data();
-                log::trace!("PS/2 mouse device ID from reset: {:#X}", device_id);
+            if let Some(device_id) = ps2.read_with_timeout() {
                 self::mouse::PS2_MOUSE.lock().set_mouse_type(device_id);
             }
+        } else {
+            log::warn!("PS/2 mouse: no response after reset");
         }
 
-        ps2.send_command(Ps2Command::SendToMouse);
-        ps2.write_data(MouseCommand::SetDefaults as u8);
-        let ack = ps2.read_data();
-        match ack {
-            0xFA => log::trace!("PS/2 mouse set default ack passed"),
-            _ => log::warn!("PS/2 mouse enable reporting ack failed: {:#X}", ack),
-        }
+        ps2.send_mouse_command(MouseCommand::SetDefaults);
+        ps2.log_ack("mouse set defaults");
 
+        // identify mouse
         ps2.send_mouse_command(MouseCommand::ReadDeviceType);
         ps2.log_ack("mouse identify");
         if let Some(mouse_id) = ps2.read_with_timeout() {
@@ -539,20 +484,16 @@ pub fn init() {
             self::mouse::PS2_MOUSE.lock().set_mouse_type(mouse_id);
         }
 
-        ps2.send_command(Ps2Command::SendToMouse);
-        ps2.write_data(MouseCommand::EnableReporting as u8);
-        let ack = ps2.read_data();
-        match ack {
-            0xFA => log::trace!("PS/2 mouse enable reporting ack passed"),
-            _ => log::warn!("PS/2 mouse enable reporting ack failed: {:#X}", ack),
-        }
+        // enable mouse reporting
+        ps2.send_mouse_command(MouseCommand::EnableReporting);
+        ps2.log_ack("mouse enable reporting");
     }
 
     // re enable translation
     config.set_translation(true);
     ps2.write_config(config.to_byte());
 
-    log::info!(
+    log::trace!(
         "PS/2 final config: {:?}",
         Ps2Config::from_byte(ps2.read_config())
     );
