@@ -380,27 +380,28 @@ pub fn init() {
     }
     ps2.write_config(config.to_byte());
 
+    // init keyboard
+    let mut keyboard_connected = false;
     if port1_works {
         // reset keyboard
-        {
-            ps2.write_data(KeyboardCommand::Reset as u8);
-            let b1 = ps2.read_with_timeout();
-            if b1.is_none() {
-                log::warn!("PS/2 port 1: no device connected (timeout)");
+        ps2.write_data(KeyboardCommand::Reset as u8);
+        let b1 = ps2.read_with_timeout();
+        if b1.is_none() {
+            log::warn!("PS/2 port 1: no device connected (timeout)");
+        } else {
+            let b1 = b1.unwrap();
+            let b2 = ps2.read_data();
+            let valid = (b1 == 0xFA && b2 == 0xAA) || (b1 == 0xAA && b2 == 0xFA);
+            if valid {
+                log::trace!("PS/2 reset successful");
+                keyboard_connected = true;
             } else {
-                let b1 = b1.unwrap();
-                let b2 = ps2.read_data();
-                let valid = (b1 == 0xFA && b2 == 0xAA) || (b1 == 0xAA && b2 == 0xFA);
-                if valid {
-                    log::trace!("PS/2 reset successful");
-                } else {
-                    log::warn!("PS/2 unexpected reset response: {:#X}, {:#X}", b1, b2);
-                }
+                log::warn!("PS/2 unexpected reset response: {:#X}, {:#X}", b1, b2);
             }
         }
 
         // identify keyboard
-        {
+        if keyboard_connected {
             ps2.send_keyboard_command(KeyboardCommand::DisableScanning);
             ps2.log_ack("disable scanning");
             ps2.send_keyboard_command(KeyboardCommand::Identify);
@@ -413,50 +414,56 @@ pub fn init() {
                 }
                 t => log::info!("PS/2 keyboard: {:?} type detected", t),
             }
+
+            // set scancode set
+            ps2.send_keyboard_command(KeyboardCommand::Scancode);
+            ps2.log_ack("set scancode set command");
+            ps2.write_data(0x02);
+            ps2.log_ack("set scancode set 2");
+
+            // detect scancode set
+            ps2.send_keyboard_command(KeyboardCommand::Scancode);
+            ps2.log_ack("get scancode set command");
+            ps2.write_data(0x00);
+            ps2.log_ack("get scancode set");
+
+            let scancode_set_id = ps2.read_data();
+            match scancode_set_id {
+                0x43 | 0x01 => ScancodeSet::Set1,
+                0x41 | 0x02 => ScancodeSet::Set2,
+                0x3F | 0x03 => ScancodeSet::Set3,
+                id => {
+                    log::warn!("PS/2 keyboard: Unknown scancode set: {:#X}", id);
+                    ScancodeSet::Unknown
+                }
+            };
+            // we will re enable translation, and so we'd be always reading set 1 regardless
+            *keyboard::PS2_KEYBOARD.lock() =
+                keyboard::Ps2Keyboard::new(keyboard::ScancodeSet::Set1);
+
+            // enable scanning
+            ps2.send_keyboard_command(KeyboardCommand::EnableScanning);
+            ps2.log_ack("enable scanning");
         }
-
-        // set scancode set
-        ps2.send_keyboard_command(KeyboardCommand::Scancode);
-        ps2.log_ack("set scancode set command");
-        ps2.write_data(0x02);
-        ps2.log_ack("set scancode set 2");
-
-        // detect scancode set
-        ps2.send_keyboard_command(KeyboardCommand::Scancode);
-        ps2.log_ack("get scancode set command");
-        ps2.write_data(0x00);
-        ps2.log_ack("get scancode set");
-
-        let scancode_set_id = ps2.read_data();
-        match scancode_set_id {
-            0x43 | 0x01 => ScancodeSet::Set1,
-            0x41 | 0x02 => ScancodeSet::Set2,
-            0x3F | 0x03 => ScancodeSet::Set3,
-            id => {
-                log::warn!("PS/2 keyboard: Unknown scancode set: {:#X}", id);
-                ScancodeSet::Unknown
-            }
-        };
-        // we will re enable translation, and so we'd be always reading set 1 regardless
-        *keyboard::PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::new(keyboard::ScancodeSet::Set1);
-
-        // enable scanning
-        ps2.send_keyboard_command(KeyboardCommand::EnableScanning);
-        ps2.log_ack("enable scanning");
     }
 
+    // init mouse
+    let mut mouse_connected = false;
     if port2_works {
         // reset mouse
         ps2.send_mouse_command(MouseCommand::Reset);
-        let ack = ps2.read_data();
-        match ack {
-            0xFE => log::warn!("PS/2 mouse resend request"),
-            0xFA => {}
-            _ => log::warn!("PS/2 mouse reset ack failed: {:#X}", ack),
+        match ps2.read_with_timeout() {
+            Some(0xFA) => {}
+            Some(0xFE) => log::warn!("PS/2 mouse resend request"),
+            Some(ack) => log::warn!("PS/2 mouse reset ack failed: {:#X}", ack),
+            None => log::warn!("PS/2 port 2: no device connected (timeout)"),
         }
         if let Some(reset_result) = ps2.read_with_timeout() {
             match reset_result {
-                0xAA => log::trace!("PS/2 mouse self test passed"),
+                0xAA => {
+                    log::trace!("PS/2 mouse self test passed");
+                    mouse_connected = true;
+                }
                 0xFC => log::warn!("PS/2 mouse self test failed"),
                 _ => log::warn!("PS/2 mouse reset result: {:#X}", reset_result),
             }
@@ -464,29 +471,29 @@ pub fn init() {
             if let Some(device_id) = ps2.read_with_timeout() {
                 self::mouse::PS2_MOUSE.lock().set_mouse_type(device_id);
             }
-        } else {
-            log::warn!("PS/2 mouse: no response after reset");
         }
 
-        ps2.send_mouse_command(MouseCommand::SetDefaults);
-        ps2.log_ack("mouse set defaults");
+        if mouse_connected {
+            ps2.send_mouse_command(MouseCommand::SetDefaults);
+            ps2.log_ack("mouse set defaults");
 
-        // identify mouse
-        ps2.send_mouse_command(MouseCommand::ReadDeviceType);
-        ps2.log_ack("mouse identify");
-        if let Some(mouse_id) = ps2.read_with_timeout() {
-            match mouse::MouseType::from_type_id(mouse_id) {
-                mouse::MouseType::Unknown => {
-                    log::warn!("PS/2 momuse: Can't identify mouse type")
+            // identify mouse
+            ps2.send_mouse_command(MouseCommand::ReadDeviceType);
+            ps2.log_ack("mouse identify");
+            if let Some(mouse_id) = ps2.read_with_timeout() {
+                match mouse::MouseType::from_type_id(mouse_id) {
+                    mouse::MouseType::Unknown => {
+                        log::warn!("PS/2 momuse: Can't identify mouse type")
+                    }
+                    t => log::info!("PS/2 mouse: {:?} type detected", t),
                 }
-                t => log::info!("PS/2 mouse: {:?} type detected", t),
+                self::mouse::PS2_MOUSE.lock().set_mouse_type(mouse_id);
             }
-            self::mouse::PS2_MOUSE.lock().set_mouse_type(mouse_id);
-        }
 
-        // enable mouse reporting
-        ps2.send_mouse_command(MouseCommand::EnableReporting);
-        ps2.log_ack("mouse enable reporting");
+            // enable mouse reporting
+            ps2.send_mouse_command(MouseCommand::EnableReporting);
+            ps2.log_ack("mouse enable reporting");
+        }
     }
 
     // re enable translation
