@@ -18,8 +18,7 @@
         rustToolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
       in {
         devShells.default = pkgs.mkShell {
-          packages = [ rustToolchain] ++ (with pkgs; [
-            rust-analyzer
+          packages = [rustToolchain] ++ (with pkgs; [
             qemu
             just
           ]);
