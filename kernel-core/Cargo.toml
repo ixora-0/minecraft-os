@@ -11,3 +11,4 @@ hashbrown.workspace = true
 libm.workspace = true
 spin.workspace = true
 log.workspace = true
+glam.workspace = true

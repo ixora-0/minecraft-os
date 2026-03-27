@@ -369,6 +369,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "glam"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f70749695b063ecbf6b62949ccccde2e733ec3ecbbd71d467dca4e5c6c97cca0"
+dependencies = [
+ "libm",
+]
+
+[[package]]
 name = "gpt"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -484,6 +493,7 @@ dependencies = [
  "bootloader_api",
  "embedded-graphics",
  "fontdue",
+ "glam",
  "hashbrown 0.16.1",
  "libm",
  "log",
