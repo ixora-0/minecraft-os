@@ -6,6 +6,9 @@ pub struct Triangle2D {
     pub v0: Vec2,
     pub v1: Vec2,
     pub v2: Vec2,
+    /// normal of the triangle before projection
+    /// used for lighting calculations
+    pub normal: Vec3,
 }
 
 pub struct Camera {
@@ -95,6 +98,7 @@ impl Camera {
             v0: self.project_vertex(vpm, tri.v0, width, height)?,
             v1: self.project_vertex(vpm, tri.v1, width, height)?,
             v2: self.project_vertex(vpm, tri.v2, width, height)?,
+            normal: tri.normal,
         })
     }
 }

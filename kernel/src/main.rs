@@ -88,10 +88,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // yaw=-50 deg
     camera.yaw = -50.0_f32.to_radians();
     // yaw=--35 deg
-    camera.pitch = -40.0_f32.to_radians();
+    camera.pitch = -35.0_f32.to_radians();
 
     let screen = game::Screen::new(20, 20, 160 * 4, 90 * 4);
-    let mesh = {
+    let mut mesh = {
         let world = game::world::WORLD.lock();
         game::world::get_world_mesh(&world)
     };
@@ -99,7 +99,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     {
         let mut renderer_guard = kernel::rendering::GLOBAL_RENDERER.lock();
         let renderer = renderer_guard.get_mut().expect("lol");
-        screen.render(&camera, &mesh, renderer);
+        screen.render(&camera, &mut mesh, renderer);
     }
 
     log::trace!("Entering loop");

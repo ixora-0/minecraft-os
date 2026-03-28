@@ -23,3 +23,8 @@ impl Triangle {
         Self { v0, v1, v2, normal }
     }
 }
+impl Triangle {
+    pub fn centroid(&self) -> Vec3 {
+        (self.v0 + self.v1 + self.v2) / 3.0
+    }
+}

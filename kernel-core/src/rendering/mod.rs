@@ -58,11 +58,20 @@ impl Color {
         green: 120,
         blue: 120,
     };
+    /// intensity between 0 and 255, 0 is black
     pub fn with_intensity(&self, intensity: u8) -> Color {
         Color {
             red: ((self.red as u16 * intensity as u16) / 255) as u8,
             green: ((self.green as u16 * intensity as u16) / 255) as u8,
             blue: ((self.blue as u16 * intensity as u16) / 255) as u8,
+        }
+    }
+    /// intensity between 0.0 and 1.0, 0.0 is black
+    pub fn with_intensity_f(&self, intensity: f32) -> Color {
+        Color {
+            red: (self.red as f32 * intensity) as u8,
+            green: (self.green as f32 * intensity) as u8,
+            blue: (self.blue as f32 * intensity) as u8,
         }
     }
     pub fn to_gray(&self) -> u8 {
@@ -238,6 +247,16 @@ mod test {
         assert_eq!(color_with_intensity.red, 255);
         assert_eq!(color_with_intensity.green, 255);
         assert_eq!(color_with_intensity.blue, 255);
+
+        let color_with_intensity_f = color.with_intensity_f(1.0);
+        assert_eq!(color_with_intensity_f.red, 255);
+        assert_eq!(color_with_intensity_f.green, 255);
+        assert_eq!(color_with_intensity_f.blue, 255);
+
+        let color_with_intensity_f_half = color.with_intensity_f(0.5);
+        assert_eq!(color_with_intensity_f_half.red, 127);
+        assert_eq!(color_with_intensity_f_half.green, 127);
+        assert_eq!(color_with_intensity_f_half.blue, 127);
     }
 
     #[test]
