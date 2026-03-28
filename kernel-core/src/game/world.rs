@@ -20,6 +20,7 @@ pub static WORLD: Lazy<Mutex<[[[bool; WORLD_Z]; WORLD_Y]; WORLD_X]>> = Lazy::new
             }
         }
     }
+    w[0][2][0] = true;
     Mutex::new(w)
 });
 

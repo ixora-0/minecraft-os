@@ -122,7 +122,7 @@ impl PixelColor for Color {
 
 pub struct Renderer<'f> {
     framebuffer: &'f mut [u8],
-    info: FrameBufferInfo,
+    pub info: FrameBufferInfo,
 }
 
 impl<'f> Renderer<'f> {

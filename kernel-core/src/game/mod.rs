@@ -1,8 +1,10 @@
 use glam::Vec3;
 pub mod camera;
+pub mod screen;
 pub mod world;
 
 pub use camera::Camera;
+pub use screen::Screen;
 
 pub struct Triangle {
     v0: Vec3,

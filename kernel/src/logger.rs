@@ -25,10 +25,18 @@ impl TextBoxLogger {
         }
     }
     pub fn enable_rendering(&self) {
-        let text_box = TextBox::new(Rectangle {
-            top_left: Point::new(50, 10),
-            size: Size::new(700, 350),
-        });
+        let text_box = {
+            let renderer_guard = rendering::GLOBAL_RENDERER.lock();
+            let renderer = renderer_guard
+                .get()
+                .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+
+            let (width, height) = (700, 350);
+            TextBox::new(Rectangle {
+                top_left: Point::new(10, (&renderer).info.height as i32 - height as i32 - 10),
+                size: Size::new(width, height),
+            })
+        };
         let mut text_box_ref = self.text_box.lock();
         *text_box_ref = Some(text_box);
     }
