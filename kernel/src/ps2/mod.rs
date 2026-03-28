@@ -7,6 +7,7 @@ pub mod mouse;
 use crate::ps2::keyboard::KeyboardType;
 
 pub use self::keyboard::{PS2_KEYBOARD, ScancodeSet};
+pub use self::mouse::PS2_MOUSE;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
@@ -362,7 +363,7 @@ fn init_keyboard(ps2: &mut Ps2Controller) {
         };
     }
     // we will re enable translation, and so we'd be always reading set 1 regardless
-    *keyboard::PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::new(keyboard::ScancodeSet::Set1);
+    *PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::new(keyboard::ScancodeSet::Set1);
 
     // enable scanning
     ps2.send_keyboard_command(KeyboardCommand::EnableScanning);
@@ -398,7 +399,7 @@ fn init_mouse(ps2: &mut Ps2Controller) {
     }
     // Read device ID (mouse sends 0x00 after self-test result)
     if let Some(device_id) = ps2.read_with_timeout() {
-        self::mouse::PS2_MOUSE.lock().set_mouse_type(device_id);
+        PS2_MOUSE.lock().set_mouse_type(device_id);
     }
 
     ps2.send_mouse_command(MouseCommand::SetDefaults);
@@ -414,7 +415,7 @@ fn init_mouse(ps2: &mut Ps2Controller) {
             }
             t => log::info!("PS/2 mouse: {:?} type detected", t),
         }
-        self::mouse::PS2_MOUSE.lock().set_mouse_type(mouse_id);
+        PS2_MOUSE.lock().set_mouse_type(mouse_id);
     }
 
     // enable reporting
