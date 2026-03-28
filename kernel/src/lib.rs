@@ -46,7 +46,7 @@ pub fn init() {
     gdt::init();
     interrupts::init_idt();
 
-    let (mask1, mask2) = build_pic_masks(&[0, 1, 12]);
+    let (mask1, mask2) = build_pic_masks(&[1, 12]);
     unsafe {
         let mut pics = interrupts::PICS.lock();
         pics.initialize();

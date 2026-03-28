@@ -10,6 +10,7 @@ use kernel::{
     allocator::{self},
     logger::{self, init_logger},
     memory::{self, BootInfoFrameAllocator},
+    ps2,
     rendering::{GLOBAL_RENDERER, init_global_renderer},
 };
 use kernel_core::rendering::Color;
@@ -103,7 +104,36 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     }
 
     log::trace!("Entering loop");
-    kernel::hlt_loop();
+
+    use kernel::ps2;
+    const MOUSE_SENSITIVITY: f32 = 1.0;
+    const PI: f32 = core::f32::consts::PI;
+    let (mut previous_mouse_x, mut previous_mouse_y) = {
+        let mouse = ps2::PS2_MOUSE.lock();
+        (mouse.x, mouse.y)
+    };
+    loop {
+        let (dx, dy) = {
+            let mouse = ps2::PS2_MOUSE.lock();
+            let dx = mouse.x - previous_mouse_x;
+            let dy = mouse.y - previous_mouse_y;
+            previous_mouse_x = mouse.x;
+            previous_mouse_y = mouse.y;
+            (dx, dy)
+        };
+
+        camera.yaw += dx as f32 * MOUSE_SENSITIVITY;
+        camera.pitch += dy as f32 * MOUSE_SENSITIVITY;
+        camera.pitch = camera.pitch.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
+
+        {
+            let mut renderer_guard = kernel::rendering::GLOBAL_RENDERER.lock();
+            let renderer = renderer_guard.get_mut().expect("lol");
+            screen.render(&camera, &mut mesh, renderer);
+        }
+        x86_64::instructions::hlt();
+    }
+    // kernel::hlt_loop();
 }
 
 #[panic_handler]
