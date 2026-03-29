@@ -105,7 +105,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     log::trace!("Entering loop");
 
-    use kernel::ps2;
     const MOUSE_SENSITIVITY: f32 = 1.0;
     const PI: f32 = core::f32::consts::PI;
     let (mut previous_mouse_x, mut previous_mouse_y) = {
