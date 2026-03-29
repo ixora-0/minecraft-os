@@ -363,7 +363,7 @@ fn init_keyboard(ps2: &mut Ps2Controller) {
         };
     }
     // we will re enable translation, and so we'd be always reading set 1 regardless
-    *PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::new(keyboard::ScancodeSet::Set1);
+    *PS2_KEYBOARD.lock() = keyboard::Ps2Keyboard::default();
 
     // enable scanning
     ps2.send_keyboard_command(KeyboardCommand::EnableScanning);
