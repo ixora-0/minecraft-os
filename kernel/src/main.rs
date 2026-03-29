@@ -122,7 +122,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         };
 
         camera.yaw += dx as f32 * MOUSE_SENSITIVITY;
-        camera.pitch += dy as f32 * MOUSE_SENSITIVITY;
+        camera.pitch -= dy as f32 * MOUSE_SENSITIVITY;
         camera.pitch = camera.pitch.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
 
         {
