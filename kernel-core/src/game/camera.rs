@@ -38,7 +38,7 @@ impl Camera {
 
     /// Returns the unit vector of the camera's direction.
     /// At yaw=0 and pitch=0, the forward direction is (0, 0, 1), which is +Z.
-    fn forward(&self) -> Vec3 {
+    pub fn forward(&self) -> Vec3 {
         Vec3::new(
             -libm::cosf(self.pitch) * libm::sinf(self.yaw),
             libm::sinf(self.pitch),

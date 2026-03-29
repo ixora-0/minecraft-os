@@ -5,6 +5,7 @@ extern crate alloc;
 use bootloader_api::BootInfo;
 use core::panic::PanicInfo;
 use embedded_graphics::draw_target::DrawTarget;
+use glam::Vec3;
 use kernel::{
     BOOTLOADER_CONFIG,
     allocator::{self},
@@ -14,6 +15,7 @@ use kernel::{
     rendering::{GLOBAL_RENDERER, init_global_renderer},
 };
 use kernel_core::rendering::Color;
+use pc_keyboard::KeyCode;
 use x86_64::VirtAddr;
 
 bootloader_api::entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
@@ -106,12 +108,14 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     log::trace!("Entering loop");
 
     const MOUSE_SENSITIVITY: f32 = 0.005;
+    const SPEED: f32 = 1.0;
     const PI: f32 = core::f32::consts::PI;
     let (mut previous_mouse_x, mut previous_mouse_y) = {
         let mouse = ps2::PS2_MOUSE.lock();
         (mouse.x, mouse.y)
     };
     loop {
+        // mouse
         let (dx, dy) = {
             let mouse = ps2::PS2_MOUSE.lock();
             let dx = mouse.x - previous_mouse_x;
@@ -120,17 +124,39 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             previous_mouse_y = mouse.y;
             (dx, dy)
         };
-
         camera.yaw += dx as f32 * MOUSE_SENSITIVITY;
         camera.pitch -= dy as f32 * MOUSE_SENSITIVITY;
         camera.pitch = camera.pitch.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
 
+        // keyboard
+        let key_states = {
+            let keyboard = ps2::PS2_KEYBOARD.lock();
+            keyboard.key_states
+        };
+        {
+            let forward = camera.forward();
+            let right = forward.cross(Vec3::Y);
+            if key_states.is_pressed(KeyCode::W) {
+                camera.position += forward * SPEED;
+            }
+            if key_states.is_pressed(KeyCode::S) {
+                camera.position -= forward * SPEED;
+            }
+            if key_states.is_pressed(KeyCode::A) {
+                camera.position -= right * SPEED;
+            }
+            if key_states.is_pressed(KeyCode::D) {
+                camera.position += right * SPEED;
+            }
+        }
+
+        // rerender
         {
             let mut renderer_guard = kernel::rendering::GLOBAL_RENDERER.lock();
             let renderer = renderer_guard.get_mut().expect("lol");
             screen.render(&camera, &mut mesh, renderer);
         }
-        x86_64::instructions::hlt();
+        // x86_64::instructions::hlt();
     }
     // kernel::hlt_loop();
 }
