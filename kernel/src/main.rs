@@ -12,7 +12,7 @@ use kernel::{
     logger::{self, init_logger},
     memory::{self, BootInfoFrameAllocator},
     ps2,
-    rendering::{GLOBAL_RENDERER, init_global_renderer},
+    rendering::init_global_renderer,
 };
 use kernel_core::rendering::Color;
 use pc_keyboard::KeyCode;
@@ -51,11 +51,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         init_global_renderer(framebuffer);
     }
     // clear screen
-    {
-        let mut renderer_guard = GLOBAL_RENDERER.lock();
-        let renderer = renderer_guard.get_mut().expect("msg");
+    kernel::rendering::with_global_renderer_mut(|renderer| {
         renderer.clear(Color::LIGHT_GRAY);
-    }
+    });
     logger::enable_rendering();
     log::info!("Hello, World!");
 
@@ -82,13 +80,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // yaw=--35 deg
     camera.pitch = -35.0_f32.to_radians();
 
-    let (pixel_format, bytes_per_pixel) = {
-        let mut renderer_guard = kernel::rendering::GLOBAL_RENDERER.lock();
-        let renderer = renderer_guard
-            .get_mut()
-            .expect(kernel::rendering::EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+    let (pixel_format, bytes_per_pixel) = kernel::rendering::with_global_renderer(|renderer| {
         (renderer.info.pixel_format, renderer.info.bytes_per_pixel)
-    };
+    });
     let mut screen = game::Screen::new(20, 20, 160 * 4, 90 * 4, pixel_format, bytes_per_pixel);
     let mut mesh = {
         let world = game::world::WORLD.lock();
@@ -161,14 +155,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         }
 
         // rerender
-        {
-            screen.render(&camera, &mut mesh);
-            let mut renderer_guard = kernel::rendering::GLOBAL_RENDERER.lock();
-            let renderer = renderer_guard
-                .get_mut()
-                .expect(kernel::rendering::EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+        screen.render(&camera, &mut mesh);
+        kernel::rendering::with_global_renderer_mut(|renderer| {
             screen.flush(renderer);
-        }
+        });
     }
 }
 
