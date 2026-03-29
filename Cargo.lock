@@ -484,6 +484,7 @@ dependencies = [
  "bootloader_api",
  "conquer-once",
  "embedded-graphics",
+ "glam",
  "kernel-core",
  "lazy_static",
  "linked_list_allocator",
