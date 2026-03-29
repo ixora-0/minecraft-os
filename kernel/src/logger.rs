@@ -94,7 +94,7 @@ impl log::Log for TextBoxLogger {
 
 pub fn init_logger() {
     log::set_logger(&LOGGER).expect("Logger already set");
-    log::set_max_level(log::LevelFilter::Warn);
+    log::set_max_level(log::LevelFilter::Info);
     // log::set_max_level(log::LevelFilter::Trace);
 }
 pub fn enable_rendering() {

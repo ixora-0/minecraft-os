@@ -8,7 +8,7 @@ use x86_64::structures::paging::{
     FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB, mapper::MapToError,
 };
 pub const HEAP_START: *mut u8 = 0x_4444_4444_0000 as *mut u8;
-pub const HEAP_SIZE: usize = 1 * 1024 * 1024; // 1 MiB
+pub const HEAP_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 
 #[global_allocator]
 pub static ALLOCATOR: HeapWithTracker = HeapWithTracker::new();

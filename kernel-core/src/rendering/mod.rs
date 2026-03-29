@@ -157,13 +157,19 @@ pub struct Renderer<'f> {
 }
 
 impl<'f> Renderer<'f> {
-    pub fn new(framebuffer: &'f mut FrameBuffer) -> Self {
+    pub fn from_framebuffer(framebuffer: &'f mut FrameBuffer) -> Self {
         Renderer {
             info: framebuffer.info(),
             framebuffer: framebuffer.buffer_mut(),
         }
     }
 
+    pub fn new(framebuffer: &'f mut [u8], info: FrameBufferInfo) -> Self {
+        Renderer { framebuffer, info }
+    }
+    pub fn buffer_mut(&mut self) -> &mut [u8] {
+        self.framebuffer
+    }
     fn render_pixel(&mut self, x: usize, y: usize, color: Color) {
         let (width, height) = (self.info.width, self.info.height);
         if !(0..width).contains(&x) || !(0..height).contains(&y) {
@@ -338,7 +344,7 @@ mod test {
         let buffer_addr = buffer.as_mut_ptr() as u64;
         let mut fb = unsafe { FrameBuffer::new(buffer_addr, INFO) };
 
-        let mut renderer = Renderer::new(&mut fb);
+        let mut renderer = Renderer::from_framebuffer(&mut fb);
         renderer.clear(Color::WHITE).unwrap();
         assert!(buffer.iter().all(|&b| b == 255));
 

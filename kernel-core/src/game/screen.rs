@@ -1,7 +1,9 @@
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
+use bootloader_api::info::{FrameBufferInfo, PixelFormat};
+use core::ptr;
 use embedded_graphics::{
     Drawable,
-    prelude::{DrawTarget, Point, Primitive, Size},
+    prelude::{Dimensions, DrawTarget, Point, Primitive, Size},
     primitives::{PrimitiveStyle, Rectangle, Triangle as egTriangle},
 };
 use glam::Vec3;
@@ -16,26 +18,50 @@ const VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap(
 const LIGHT_DIRECTION: Lazy<Vec3> = Lazy::new(|| Vec3::new(-1.0, -1.0, 0.2).normalize());
 
 pub struct Screen {
+    /// bounding box within the global framebuffer
     pub bounding_box: Rectangle,
+    /// temporary buffer used for rendering, can be flushed to the global framebuffer
+    buffer: Vec<u8>,
+    info: FrameBufferInfo,
 }
+
 impl Screen {
-    pub fn new(x: i32, y: i32, width: u32, height: u32) -> Self {
+    pub fn new(
+        x: i32,
+        y: i32,
+        width: usize,
+        height: usize,
+        pixel_format: PixelFormat,
+        bytes_per_pixel: usize,
+    ) -> Self {
+        let byte_len = width * height * bytes_per_pixel;
+        let info = FrameBufferInfo {
+            byte_len,
+            width,
+            height,
+            pixel_format,
+            bytes_per_pixel,
+            stride: width,
+        };
+        let buffer = vec![0u8; byte_len];
         Self {
-            bounding_box: Rectangle::new(Point::new(x, y), Size::new(width, height)),
+            bounding_box: Rectangle::new(Point::new(x, y), Size::new(width as u32, height as u32)),
+            buffer,
+            info,
         }
     }
 
-    /// need mutable reference of mesh to sort by depth relative to the camera
-    pub fn render(&self, camera: &Camera, mesh: &mut Vec<Triangle>, renderer: &mut Renderer) {
-        // painter's algorithm
+    fn as_draw_target(&mut self) -> Renderer<'_> {
+        Renderer::new(self.buffer.as_mut_slice(), self.info)
+    }
+
+    /// need mutable reference of mesh to sort by depth relative to the camera (painter's algorithm)
+    pub fn render(&mut self, camera: &Camera, mesh: &mut Vec<Triangle>) {
         mesh.sort_unstable_by(|t1, t2| {
             let d1 = (t1.centroid() - camera.position).length_squared();
             let d2 = (t2.centroid() - camera.position).length_squared();
             d2.partial_cmp(&d1).unwrap() // far to near
         });
-        // clear screen
-        renderer.fill_solid(&self.bounding_box, *VOID_COLOR);
-
         let (wf, hf) = (
             self.bounding_box.size.width as f32,
             self.bounding_box.size.height as f32,
@@ -44,6 +70,12 @@ impl Screen {
         let projected_mesh = mesh
             .iter()
             .filter_map(|tri| camera.project_triangle(&vpm, tri, wf, hf));
+
+        // clear screen
+        let mut renderer = self.as_draw_target();
+        renderer.clear(*VOID_COLOR);
+
+        // draw mesh
         for tri in projected_mesh {
             let light = -tri.normal.dot(*LIGHT_DIRECTION); // -1 to 1
             const MIN_LIGHT: f32 = 0.1;
@@ -51,23 +83,171 @@ impl Screen {
             let color = Color::WHITE.with_intensity_f(light);
 
             let t = egTriangle::new(
-                Point::new(
-                    tri.v0.x as i32 + self.bounding_box.top_left.x,
-                    tri.v0.y as i32 + self.bounding_box.top_left.y,
-                ),
-                Point::new(
-                    tri.v1.x as i32 + self.bounding_box.top_left.x,
-                    tri.v1.y as i32 + self.bounding_box.top_left.y,
-                ),
-                Point::new(
-                    tri.v2.x as i32 + self.bounding_box.top_left.x,
-                    tri.v2.y as i32 + self.bounding_box.top_left.y,
-                ),
+                Point::new(tri.v0.x as i32, tri.v0.y as i32),
+                Point::new(tri.v1.x as i32, tri.v1.y as i32),
+                Point::new(tri.v2.x as i32, tri.v2.y as i32),
             );
             t.into_styled(PrimitiveStyle::with_fill(color))
-                .draw(renderer);
+                .draw(&mut renderer);
             // t.into_styled(PrimitiveStyle::with_stroke(Color::RED, 1))
-            //     .draw(renderer);
+            //     .draw(&mut renderer);
         }
+    }
+
+    /// Copies the screen's temporary buffer into the global renderer.
+    ///
+    /// Panics if pixel formats don't match.
+    /// Caller should ensure the screen's pixel format matches the global renderer's.
+    pub fn flush(&mut self, global_renderer: &mut Renderer) {
+        assert_eq!(
+            self.info.pixel_format, global_renderer.info.pixel_format,
+            "Pixel format mismatch: screen uses {:?}, global uses {:?}.",
+            self.info.pixel_format, global_renderer.info.pixel_format
+        );
+        let bpp = self.info.bytes_per_pixel;
+        assert_eq!(
+            bpp, global_renderer.info.bytes_per_pixel,
+            "bytes_per_pixel mismatch"
+        );
+
+        let area = global_renderer
+            .bounding_box()
+            .intersection(&self.bounding_box);
+        if area.bottom_right().is_none() {
+            return;
+        }
+        let dst_start_x = area.top_left.x as usize;
+        let dst_start_y = area.top_left.y as usize;
+        let copy_width = area.size.width as usize;
+        let copy_height = area.size.height as usize;
+
+        let src_start_x = (-self.bounding_box.top_left.x).max(0) as usize;
+        let src_start_y = (-self.bounding_box.top_left.y).max(0) as usize;
+
+        // bytes per row to copy
+        let copy_bytes = (copy_width * bpp) as usize;
+
+        let src_ptr = self.buffer.as_ptr();
+        let dst_ptr = global_renderer.buffer_mut().as_mut_ptr();
+        for y in 0..copy_height {
+            let src_offset = ((src_start_y + y) * self.info.stride + src_start_x) * bpp;
+            let dst_offset = ((dst_start_y + y) * global_renderer.info.stride + dst_start_x) * bpp;
+
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    src_ptr.add(src_offset),
+                    dst_ptr.add(dst_offset),
+                    copy_bytes,
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rendering::Renderer;
+
+    fn make_framebuffer_info(width: usize, height: usize, bpp: usize) -> FrameBufferInfo {
+        FrameBufferInfo {
+            byte_len: width * height * bpp,
+            width,
+            height,
+            pixel_format: PixelFormat::Rgb,
+            bytes_per_pixel: bpp,
+            stride: width,
+        }
+    }
+
+    #[test]
+    fn flush_copies_data_correctly() {
+        let bpp = 4;
+        let screen_width = 4;
+        let screen_height = 4;
+
+        let mut screen = Screen::new(0, 0, screen_width, screen_height, PixelFormat::Rgb, bpp);
+        screen.buffer.fill(0xFF);
+
+        let mut global_buffer = vec![0u8; 16 * 16 * 4];
+        let mut global_renderer =
+            Renderer::new(&mut global_buffer, make_framebuffer_info(16, 16, bpp));
+
+        screen.flush(&mut global_renderer);
+
+        for y in 0..4 {
+            for x in 0..4 {
+                let offset = (y * 16 + x) * 4;
+                assert_eq!(global_buffer[offset], 0xFF);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Pixel format mismatch")]
+    fn flush_panics_on_pixel_format_mismatch() {
+        let bpp = 4;
+        let mut screen = Screen::new(0, 0, 4, 4, PixelFormat::Rgb, bpp);
+
+        let mut global_buffer = vec![0u8; 16 * 16 * 4];
+        let mut wrong_format_info = make_framebuffer_info(16, 16, bpp);
+        wrong_format_info.pixel_format = PixelFormat::Bgr;
+        let mut global_renderer = Renderer::new(&mut global_buffer, wrong_format_info);
+
+        screen.flush(&mut global_renderer);
+    }
+
+    #[test]
+    #[should_panic(expected = "bytes_per_pixel mismatch")]
+    fn flush_panics_on_bpp_mismatch() {
+        let mut screen = Screen::new(0, 0, 4, 4, PixelFormat::Rgb, 4);
+
+        let mut global_buffer = vec![0u8; 16 * 16 * 3];
+        let info = FrameBufferInfo {
+            byte_len: 16 * 16 * 3,
+            width: 16,
+            height: 16,
+            pixel_format: PixelFormat::Rgb,
+            bytes_per_pixel: 3,
+            stride: 16 * 3,
+        };
+        let mut global_renderer = Renderer::new(&mut global_buffer, info);
+
+        screen.flush(&mut global_renderer);
+    }
+
+    #[test]
+    fn flush_no_intersection_returns_early() {
+        let bpp = 4;
+        let mut screen = Screen::new(100, 100, 4, 4, PixelFormat::Rgb, bpp);
+        screen.buffer.fill(0xFF);
+
+        let mut global_buffer = vec![0u8; 16 * 16 * 4];
+        let mut global_renderer =
+            Renderer::new(&mut global_buffer, make_framebuffer_info(16, 16, bpp));
+
+        screen.flush(&mut global_renderer);
+        assert!(global_buffer.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn flush_partial_overlap() {
+        let bpp = 4;
+        let mut screen = Screen::new(2, 2, 4, 4, PixelFormat::Rgb, bpp);
+        screen.buffer.fill(0xAA);
+
+        let mut global_buffer = vec![0u8; 16 * 16 * 4];
+        let mut global_renderer =
+            Renderer::new(&mut global_buffer, make_framebuffer_info(16, 16, bpp));
+
+        screen.flush(&mut global_renderer);
+
+        for y in 2..6 {
+            for x in 2..6 {
+                let offset = (y * 16 + x) * 4;
+                assert_eq!(global_buffer[offset], 0xAA);
+            }
+        }
+        assert_eq!(global_buffer[0], 0);
     }
 }

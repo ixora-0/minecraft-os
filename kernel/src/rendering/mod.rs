@@ -12,5 +12,5 @@ pub const EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED: &str =
 pub fn init_global_renderer(framebuffer: &'static mut FrameBuffer) {
     GLOBAL_RENDERER
         .lock()
-        .call_once(|| Renderer::new(framebuffer));
+        .call_once(|| Renderer::from_framebuffer(framebuffer));
 }

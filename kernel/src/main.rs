@@ -71,17 +71,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     kernel::ps2::init();
 
-    {
-        let allocated = kernel::allocator::ALLOCATOR.get_allocated_bytes();
-        let available = allocator::HEAP_SIZE;
-        log::info!(
-            "Alocated bytes after init sequence: {} / {} ({}%)",
-            allocated,
-            available,
-            (allocated as f32 / available as f32 * 100.0) as u32
-        );
-    }
-
     x86_64::instructions::interrupts::enable();
     // kernel::acpi::shutdown();
 
@@ -93,18 +82,29 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // yaw=--35 deg
     camera.pitch = -35.0_f32.to_radians();
 
-    let screen = game::Screen::new(20, 20, 160 * 4, 90 * 4);
+    let (pixel_format, bytes_per_pixel) = {
+        let mut renderer_guard = kernel::rendering::GLOBAL_RENDERER.lock();
+        let renderer = renderer_guard
+            .get_mut()
+            .expect(kernel::rendering::EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+        (renderer.info.pixel_format, renderer.info.bytes_per_pixel)
+    };
+    let mut screen = game::Screen::new(20, 20, 160 * 4, 90 * 4, pixel_format, bytes_per_pixel);
     let mut mesh = {
         let world = game::world::WORLD.lock();
         game::world::get_world_mesh(&world)
     };
 
     {
-        let mut renderer_guard = kernel::rendering::GLOBAL_RENDERER.lock();
-        let renderer = renderer_guard.get_mut().expect("lol");
-        screen.render(&camera, &mut mesh, renderer);
+        let allocated = kernel::allocator::ALLOCATOR.get_allocated_bytes();
+        let available = allocator::HEAP_SIZE;
+        log::info!(
+            "Alocated bytes after init sequence: {} / {} ({}%)",
+            allocated,
+            available,
+            (allocated as f32 / available as f32 * 100.0) as u32
+        );
     }
-
     log::trace!("Entering loop");
 
     const MOUSE_SENSITIVITY: f32 = 0.005;
@@ -162,13 +162,14 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
         // rerender
         {
+            screen.render(&camera, &mut mesh);
             let mut renderer_guard = kernel::rendering::GLOBAL_RENDERER.lock();
-            let renderer = renderer_guard.get_mut().expect("lol");
-            screen.render(&camera, &mut mesh, renderer);
+            let renderer = renderer_guard
+                .get_mut()
+                .expect(kernel::rendering::EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+            screen.flush(renderer);
         }
-        // x86_64::instructions::hlt();
     }
-    // kernel::hlt_loop();
 }
 
 #[panic_handler]
