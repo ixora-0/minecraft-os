@@ -134,7 +134,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             keyboard.key_states
         };
         {
+            // wasd moves on XZ plane
             let forward = camera.forward();
+            let forward = Vec3::new(forward.x, 0.0, forward.z).normalize(); //  project onto XZ
             let right = forward.cross(Vec3::Y);
             if key_states.is_pressed(KeyCode::W) {
                 camera.position += forward * SPEED;
@@ -147,6 +149,14 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             }
             if key_states.is_pressed(KeyCode::D) {
                 camera.position += right * SPEED;
+            }
+
+            // up down
+            if key_states.is_pressed(KeyCode::Spacebar) {
+                camera.position += Vec3::Y * SPEED;
+            }
+            if key_states.is_pressed(KeyCode::LShift) {
+                camera.position -= Vec3::Y * SPEED;
             }
         }
 
