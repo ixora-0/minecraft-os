@@ -1,5 +1,5 @@
 use bootloader_api::info::{FrameBuffer, FrameBufferInfo, PixelFormat};
-use core::fmt;
+use core::{fmt, ptr};
 use embedded_graphics::{
     Pixel,
     draw_target::DrawTarget,
@@ -106,6 +106,14 @@ impl Color {
         }
     }
 
+    fn build_48_byte_pattern(&self, format: PixelFormat, bpp: usize) -> [u8; 48] {
+        let mut pattern = [0u8; 48];
+        for chunk in pattern.chunks_exact_mut(bpp) {
+            self.write_to(chunk, format);
+        }
+        pattern
+    }
+
     pub fn fg(&self) -> Fg<'_> {
         Fg(self)
     }
@@ -127,6 +135,20 @@ impl fmt::Display for Fg<'_> {
 
 impl PixelColor for Color {
     type Raw = RawU24;
+}
+
+unsafe fn fill_slice_48(dst: *mut u8, len: usize, pattern: &[u8; 48]) {
+    if len == 0 {
+        return;
+    }
+
+    let num_chunks = len / 48;
+    let remainder = len % 48;
+
+    for chunk in 0..num_chunks {
+        unsafe { ptr::copy_nonoverlapping(pattern.as_ptr(), dst.add(chunk * 48), 48) };
+    }
+    unsafe { ptr::copy_nonoverlapping(pattern.as_ptr(), dst.add(num_chunks * 48), remainder) };
 }
 
 pub struct Renderer<'f> {
@@ -221,10 +243,51 @@ impl<'f> DrawTarget for Renderer<'f> {
         Ok(())
     }
 
+    fn fill_solid(&mut self, area: &Rectangle, color: Self::Color) -> Result<(), Self::Error> {
+        let area = area.intersection(&self.bounding_box());
+        if area.bottom_right().is_none() {
+            return Ok(());
+        }
+
+        let bpp = self.info.bytes_per_pixel;
+        let width = area.size.width as usize;
+        let row_bytes = width * bpp;
+        if row_bytes == 0 {
+            return Ok(());
+        }
+
+        let format = self.info.pixel_format;
+        let pattern = color.build_48_byte_pattern(format, self.info.bytes_per_pixel);
+
+        for y in area.rows() {
+            let y = y as usize;
+            let row_start = {
+                let line_offset = y * self.info.stride;
+                let pixel_offset = line_offset + area.top_left.x as usize;
+                pixel_offset * self.info.bytes_per_pixel
+            };
+            unsafe {
+                fill_slice_48(
+                    self.framebuffer.as_mut_ptr().add(row_start),
+                    row_bytes,
+                    &pattern,
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
         debug_assert!(self.framebuffer.len() % self.info.bytes_per_pixel == 0);
-        for chunk in self.framebuffer.chunks_mut(self.info.bytes_per_pixel) {
-            color.write_to(chunk, self.info.pixel_format);
+        let len = self.framebuffer.len();
+        if len == 0 {
+            return Ok(());
+        }
+        let pattern =
+            color.build_48_byte_pattern(self.info.pixel_format, self.info.bytes_per_pixel);
+        unsafe {
+            fill_slice_48(self.framebuffer.as_mut_ptr(), len, &pattern);
         }
         Ok(())
     }
@@ -277,7 +340,84 @@ mod test {
 
         let mut renderer = Renderer::new(&mut fb);
         renderer.clear(Color::WHITE).unwrap();
-
         assert!(buffer.iter().all(|&b| b == 255));
+
+        renderer.clear(Color::RED).unwrap();
+        for chunk in buffer.chunks(3) {
+            assert_eq!(chunk, &[0xFF, 0x00, 0x00]);
+        }
+    }
+
+    #[test]
+    fn build_48_byte_pattern_rgb() {
+        let color = Color {
+            red: 0x12,
+            green: 0x34,
+            blue: 0x56,
+        };
+        let pattern = color.build_48_byte_pattern(PixelFormat::Rgb, 4);
+        for chunk in pattern.chunks(4) {
+            assert_eq!(chunk, &[0x12, 0x34, 0x56, 0x00]);
+        }
+    }
+
+    #[test]
+    fn fill_slice_48_exact_48_bytes() {
+        let pattern = [0xAAu8; 48];
+        let mut buffer = [0u8; 48];
+        unsafe {
+            fill_slice_48(buffer.as_mut_ptr(), 48, &pattern);
+        }
+        assert!(buffer.iter().all(|&b| b == 0xAA));
+    }
+
+    #[test]
+    fn fill_slice_48_multiple_of_48() {
+        let pattern = [0xBBu8; 48];
+        let mut buffer = [0u8; 144];
+        unsafe {
+            fill_slice_48(buffer.as_mut_ptr(), 144, &pattern);
+        }
+        assert!(buffer.iter().all(|&b| b == 0xBB));
+    }
+
+    #[test]
+    fn fill_slice_48_remainder() {
+        let pattern = [0xCCu8; 48];
+        let mut buffer = [0u8; 50];
+        unsafe {
+            fill_slice_48(buffer.as_mut_ptr(), 50, &pattern);
+        }
+        assert!(buffer.iter().all(|&b| b == 0xCC));
+    }
+
+    #[test]
+    fn fill_slice_48_zero_len() {
+        let pattern = [0xDDu8; 48];
+        let mut buffer = [0u8; 48];
+        buffer[0] = 0x11;
+        unsafe {
+            fill_slice_48(buffer.as_mut_ptr(), 0, &pattern);
+        }
+        assert_eq!(buffer[0], 0x11);
+    }
+
+    #[test]
+    fn fill_slice_48_pattern_repeats() {
+        let color = Color {
+            red: 1,
+            green: 2,
+            blue: 3,
+        };
+        let pattern = color.build_48_byte_pattern(PixelFormat::Rgb, 4);
+        let mut buffer = [0u8; 67 * 4];
+
+        unsafe {
+            fill_slice_48(buffer.as_mut_ptr(), 67 * 4, &pattern);
+        }
+
+        for chunk in buffer.chunks(4) {
+            assert_eq!(chunk, &[1, 2, 3, 0]);
+        }
     }
 }
