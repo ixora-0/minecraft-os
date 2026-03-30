@@ -12,6 +12,7 @@ use kernel::{
     logger::{self, init_logger},
     memory::{self, BootInfoFrameAllocator},
     ps2,
+    ps2::mouse::MouseButtons,
     rendering::init_global_renderer,
 };
 use kernel_core::rendering::Color;
@@ -108,15 +109,21 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         let mouse = ps2::PS2_MOUSE.lock();
         (mouse.x, mouse.y)
     };
+    let mut previous_mouse_button = MouseButtons::None;
     loop {
         // mouse
-        let (dx, dy) = {
+        let (dx, dy, left_clicked) = {
             let mouse = ps2::PS2_MOUSE.lock();
             let dx = mouse.x - previous_mouse_x;
             let dy = mouse.y - previous_mouse_y;
             previous_mouse_x = mouse.x;
             previous_mouse_y = mouse.y;
-            (dx, dy)
+
+            let left_clicked =
+                mouse.buttons.is_left_down() && !previous_mouse_button.is_left_down();
+            previous_mouse_button = mouse.buttons;
+
+            (dx, dy, left_clicked)
         };
         camera.yaw += dx as f32 * MOUSE_SENSITIVITY;
         camera.pitch -= dy as f32 * MOUSE_SENSITIVITY;
@@ -154,17 +161,25 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             }
         }
 
-        // rerender
-        screen.render(&camera, &mut mesh);
-
+        // targeted block
         let targeted_block = {
             let world = game::world::WORLD.lock();
             camera.looking_at_solid_block(&world)
         };
+        if left_clicked {
+            if let Some((block_pos, ref _face)) = targeted_block {
+                let mut world = game::world::WORLD.lock();
+                world[block_pos.x][block_pos.y][block_pos.z] = false;
+                // have to rebuild world mesh
+                mesh = game::world::get_world_mesh(&world);
+            }
+        }
+
+        // rerender
+        screen.render(&camera, &mut mesh);
         if let Some((block_pos, _face)) = targeted_block {
             screen.draw_block_outline(&camera, block_pos, Color::BLACK);
         }
-
         screen.draw_crosshair();
 
         kernel::rendering::with_global_renderer_mut(|renderer| {
