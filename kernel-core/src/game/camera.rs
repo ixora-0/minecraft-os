@@ -77,9 +77,9 @@ impl Iterator for VoxelTraverser {
                     let face = match axis {
                         0 => {
                             if forward_sign.x.is_sign_negative() {
-                                Face::LEFT
-                            } else {
                                 Face::RIGHT
+                            } else {
+                                Face::LEFT
                             }
                         }
                         1 => {
@@ -91,9 +91,9 @@ impl Iterator for VoxelTraverser {
                         }
                         2 => {
                             if forward_sign.z.is_sign_negative() {
-                                Face::BACK
-                            } else {
                                 Face::FRONT
+                            } else {
+                                Face::BACK
                             }
                         }
                         _ => unreachable!(),
@@ -136,7 +136,7 @@ impl Iterator for VoxelTraverser {
                     if t.x < t.z {
                         current_block.x = current_block.x.wrapping_add_signed(step.x);
                         t.x += delta.x;
-                        // +X is right face, step.x < 0 means coming from +X, so right
+                        // +X is right face, step.x < 0 means coming from +X, so looking at right
                         if step.x < 0 { Face::RIGHT } else { Face::LEFT }
                     } else {
                         current_block.z = current_block.z.wrapping_add_signed(step.z);
@@ -410,7 +410,7 @@ mod tests {
         assert_eq!(pos.x, 1);
         assert_eq!(pos.y, 1);
         assert_eq!(pos.z, 0);
-        assert_eq!(face, Face::FRONT);
+        assert_eq!(face, Face::BACK);
     }
 
     #[test]
@@ -439,7 +439,7 @@ mod tests {
         assert_eq!(pos.x, 1);
         assert_eq!(pos.y, 1);
         assert_eq!(pos.z, 0, "Should return closest block, not further one");
-        assert_eq!(face, Face::FRONT);
+        assert_eq!(face, Face::BACK);
     }
 
     #[test]
@@ -490,7 +490,7 @@ mod tests {
         assert_eq!(pos.x, 3);
         assert_eq!(pos.y, 1);
         assert_eq!(pos.z, 1);
-        assert_eq!(face, Face::LEFT);
+        assert_eq!(face, Face::RIGHT);
     }
 
     #[test]
