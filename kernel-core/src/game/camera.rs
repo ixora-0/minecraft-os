@@ -508,4 +508,34 @@ mod tests {
             "Should not hit block, ray passes through air at y=1"
         );
     }
+
+    #[test]
+    fn camera_inside_solid_block() {
+        let mut camera = Camera::default();
+        camera.set_position(0.5, 0.5, 0.5);
+        let mut world: World = [[[false; 4]; 4]; 4];
+        world[0][0][0] = true;
+        let result = camera.looking_at_solid_block(&world);
+        assert!(result.is_some(), "Should hit block camera is inside");
+        let (pos, _) = result.unwrap();
+        assert_eq!(pos.x, 0);
+        assert_eq!(pos.y, 0);
+        assert_eq!(pos.z, 0);
+    }
+
+    #[test]
+    fn looking_corner_to_corner() {
+        let mut camera = Camera::default();
+        camera.set_position(0.0, 0.0, 0.0);
+        camera.yaw = -PI / 4.0;
+        camera.pitch = libm::atanf(1.0 / libm::sqrtf(2.0));
+        let mut world: World = [[[false; 4]; 4]; 4];
+        world[3][3][3] = true;
+        let result = camera.looking_at_solid_block(&world);
+        assert!(result.is_some(), "Should hit the other corner");
+        let (pos, _) = result.unwrap();
+        assert_eq!(pos.x, 3);
+        assert_eq!(pos.y, 3);
+        assert_eq!(pos.z, 3);
+    }
 }
