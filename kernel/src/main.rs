@@ -157,6 +157,14 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         // rerender
         screen.render(&camera, &mut mesh);
 
+        let targeted_block = {
+            let world = game::world::WORLD.lock();
+            camera.looking_at_solid_block(&world)
+        };
+        if let Some((block_pos, _face)) = targeted_block {
+            screen.draw_block_outline(&camera, block_pos, Color::BLACK);
+        }
+
         screen.draw_crosshair();
 
         kernel::rendering::with_global_renderer_mut(|renderer| {

@@ -171,7 +171,7 @@ impl Camera {
 
     /// Returns None if the vertex is behind the camera or fully outside clip space.
     /// NOTE: this means triangles partially off-screen get culled entirely. Good enough for now.
-    fn project_vertex(&self, vpm: &Mat4, v: Vec3, width: f32, height: f32) -> Option<Vec2> {
+    pub fn project_vertex(&self, vpm: &Mat4, v: Vec3, width: f32, height: f32) -> Option<Vec2> {
         let clip = vpm * v.extend(1.0); // extend to homogeneous coords
 
         // behind the camera
