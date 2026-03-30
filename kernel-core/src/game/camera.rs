@@ -134,22 +134,23 @@ impl Iterator for VoxelTraverser {
             } => {
                 let face = if t.x < t.y {
                     if t.x < t.z {
-                        current_block.x = current_block.x.saturating_add_signed(step.x);
+                        current_block.x = current_block.x.wrapping_add_signed(step.x);
                         t.x += delta.x;
                         // +X is right face, step.x < 0 means coming from +X, so right
                         if step.x < 0 { Face::RIGHT } else { Face::LEFT }
                     } else {
-                        current_block.z = current_block.z.saturating_add_signed(step.z);
+                        current_block.z = current_block.z.wrapping_add_signed(step.z);
                         t.z += delta.z;
                         if step.z < 0 { Face::FRONT } else { Face::BACK }
                     }
                 } else {
                     if t.y < t.z {
-                        current_block.y = current_block.y.saturating_add_signed(step.y);
+                        current_block.y = current_block.y.wrapping_add_signed(step.y);
                         t.y += delta.y;
                         if step.y < 0 { Face::TOP } else { Face::BOTTOM }
                     } else {
-                        current_block.z = current_block.z.saturating_add_signed(step.z);
+                        current_block.z = current_block.z.wrapping_add_signed(step.z);
+
                         t.z += delta.z;
                         if step.z < 0 { Face::FRONT } else { Face::BACK }
                     }
