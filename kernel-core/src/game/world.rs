@@ -1,6 +1,6 @@
 use super::Triangle;
 use alloc::vec::Vec;
-use glam::Vec3;
+use glam::{USizeVec3, Vec3};
 use spin::{Lazy, Mutex};
 
 // World dimensions in blocks (x, y, z)
@@ -157,6 +157,9 @@ pub fn get_world_mesh(world: &[[[bool; WORLD_Z]; WORLD_Y]; WORLD_X]) -> Vec<Tria
     }
 
     mesh
+}
+pub fn is_in_bounds(b: USizeVec3) -> bool {
+    b.x < WORLD_X && b.y < WORLD_Y && b.z < WORLD_Z
 }
 
 #[cfg(test)]

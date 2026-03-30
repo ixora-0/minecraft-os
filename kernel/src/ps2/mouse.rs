@@ -37,6 +37,12 @@ impl MouseButtons {
             MouseButtons::Left | MouseButtons::LeftMiddle | MouseButtons::LeftRight
         )
     }
+    pub fn is_right_down(&self) -> bool {
+        matches!(
+            self,
+            MouseButtons::Right | MouseButtons::RightMiddle | MouseButtons::LeftRight
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
