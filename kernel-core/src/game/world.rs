@@ -8,9 +8,11 @@ const WORLD_X: usize = 4;
 const WORLD_Y: usize = 4;
 const WORLD_Z: usize = 4;
 
+pub type World = [[[bool; WORLD_Z]; WORLD_Y]; WORLD_X];
+
 /// Global world blocks storage.
 /// Indexed as [x][y][z], where true = solid block, false = air.
-pub static WORLD: Lazy<Mutex<[[[bool; WORLD_Z]; WORLD_Y]; WORLD_X]>> = Lazy::new(|| {
+pub static WORLD: Lazy<Mutex<World>> = Lazy::new(|| {
     // initialize with a 4-layer thick floor of solid blocks.
     let mut w = [[[false; WORLD_Z]; WORLD_Y]; WORLD_X];
     for y in 0..2 {
@@ -162,7 +164,7 @@ mod tests {
     use super::*;
 
     /// Creates an empty 8x8x8 world filled with air
-    fn empty_world() -> [[[bool; WORLD_Z]; WORLD_Y]; WORLD_X] {
+    fn empty_world() -> World {
         [[[false; WORLD_Z]; WORLD_Y]; WORLD_X]
     }
 
