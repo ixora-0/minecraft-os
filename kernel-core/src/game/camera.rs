@@ -434,9 +434,77 @@ mod tests {
         let result = camera.looking_at_solid_block(&world);
         assert!(result.is_some(), "Should hit solid block");
 
-        let (pos, _) = result.unwrap();
+        let (pos, face) = result.unwrap();
         assert_eq!(pos.x, 1);
         assert_eq!(pos.y, 1);
         assert_eq!(pos.z, 0, "Should return closest block, not further one");
+        assert_eq!(face, Face::FRONT);
+    }
+
+    #[test]
+    fn ray_exits_world_returns_none() {
+        let mut camera = Camera::default();
+        camera.set_position(0.5, 0.5, 5.0);
+
+        let world: World = [[[false; 4]; 4]; 4];
+
+        let result = camera.looking_at_solid_block(&world);
+        assert!(
+            result.is_none(),
+            "Should not hit any block - looking away from world"
+        );
+    }
+
+    #[test]
+    fn looking_from_world_boundary() {
+        let mut camera = Camera::default();
+        camera.set_position(0.5, 0.5, 4.0);
+
+        let world: World = [[[false; 4]; 4]; 4];
+
+        let result = camera.looking_at_solid_block(&world);
+        assert!(result.is_none(), "Camera at boundary shouldn't count");
+    }
+
+    #[test]
+    fn looking_with_neg_x_dir() {
+        let mut camera = Camera::default();
+        camera.set_position(5.0, 1.5, 1.5);
+        camera.yaw = PI / 2.0; // -X
+
+        let forward = camera.forward();
+        let mut world: World = [[[false; 4]; 4]; 4];
+        world[3][1][1] = true;
+
+        let result = camera.looking_at_solid_block(&world);
+        assert!(
+            result.is_some(),
+            "forward=({},{},{})",
+            forward.x,
+            forward.y,
+            forward.z
+        );
+
+        let (pos, face) = result.unwrap();
+        assert_eq!(pos.x, 3);
+        assert_eq!(pos.y, 1);
+        assert_eq!(pos.z, 1);
+        assert_eq!(face, Face::LEFT);
+    }
+
+    #[test]
+    fn looking_at_air_not_nearby_solid() {
+        let mut camera = Camera::default();
+        camera.set_position(1.5, 1.5, 4.5);
+        camera.yaw = PI; // -Z
+
+        let mut world: World = [[[false; 4]; 4]; 4];
+        world[1][0][3] = true;
+
+        let result = camera.looking_at_solid_block(&world);
+        assert!(
+            result.is_none(),
+            "Should not hit block, ray passes through air at y=1"
+        );
     }
 }
