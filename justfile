@@ -19,5 +19,9 @@ alias b := build
 build:
     cargo build
 
+alias br := build-release
+build-release:
+    cargo build --release
+
 move-images:
     cargo run -p minecraft-os --bin move-images
