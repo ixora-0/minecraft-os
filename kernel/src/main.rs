@@ -101,7 +101,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     }
     log::trace!("Entering loop");
 
-    const MOUSE_SENSITIVITY: f32 = 0.005;
+    const MOUSE_SENSITIVITY: f32 = 0.015;
     const SPEED: f32 = 1.0;
     const PI: f32 = core::f32::consts::PI;
     let (mut previous_mouse_x, mut previous_mouse_y) = {
@@ -156,6 +156,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
         // rerender
         screen.render(&camera, &mut mesh);
+
+        screen.draw_crosshair();
+
         kernel::rendering::with_global_renderer_mut(|renderer| {
             screen.flush(renderer);
         });

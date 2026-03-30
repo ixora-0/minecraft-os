@@ -4,7 +4,7 @@ use core::ptr;
 use embedded_graphics::{
     Drawable,
     prelude::{Dimensions, DrawTarget, Point, Primitive, Size},
-    primitives::{PrimitiveStyle, Rectangle, Triangle as egTriangle},
+    primitives::{Line, PrimitiveStyle, Rectangle, Triangle as egTriangle},
 };
 use glam::Vec3;
 use spin::Lazy;
@@ -16,6 +16,9 @@ use crate::{
 
 const VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap());
 const LIGHT_DIRECTION: Lazy<Vec3> = Lazy::new(|| Vec3::new(-1.0, -1.0, 0.2).normalize());
+const CROSSHAIR_COLOR: Color = Color::BLACK;
+const CROSSHAIR_LEN: u32 = 5;
+const CROSSHAIR_THICKNESS: u32 = 2;
 
 pub struct Screen {
     /// bounding box within the global framebuffer
@@ -92,6 +95,29 @@ impl Screen {
             // t.into_styled(PrimitiveStyle::with_stroke(Color::RED, 1))
             //     .draw(&mut renderer);
         }
+    }
+
+    pub fn draw_crosshair(&mut self) {
+        let style = PrimitiveStyle::with_stroke(CROSSHAIR_COLOR, CROSSHAIR_THICKNESS);
+        let wf = self.bounding_box.size.width as f32;
+        let hf = self.bounding_box.size.height as f32;
+        let center = Point::new((wf / 2.0) as i32, (hf / 2.0) as i32);
+
+        let mut renderer = self.as_draw_target();
+        Line::new(
+            Point::new(center.x - CROSSHAIR_LEN as i32, center.y),
+            Point::new(center.x + CROSSHAIR_LEN as i32, center.y),
+        )
+        .into_styled(style)
+        .draw(&mut renderer)
+        .unwrap();
+        Line::new(
+            Point::new(center.x, center.y - CROSSHAIR_LEN as i32),
+            Point::new(center.x, center.y + CROSSHAIR_LEN as i32),
+        )
+        .into_styled(style)
+        .draw(&mut renderer)
+        .unwrap();
     }
 
     /// Copies the screen's temporary buffer into the global renderer.
