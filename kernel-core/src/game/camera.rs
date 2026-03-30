@@ -1,3 +1,5 @@
+use core::{f32, ops::Neg};
+
 use crate::game::{Face, World};
 
 use super::Triangle;
@@ -50,29 +52,67 @@ impl Iterator for VoxelTraverser {
                 position,
                 forward,
             } => {
-                let forward_inverse =
-                    forward.map(|x| if x == 0.0 { f32::INFINITY } else { x.recip() });
-                let current_block = {
-                    let mut tmin = 0f32;
-                    let mut tmax = f32::INFINITY;
-                    for i in 0..3 {
-                        let t1 = -position[i] * forward_inverse[i];
-                        let t2 = (world_dimensions[i] as f32 - position[i]) * forward_inverse[i];
-                        tmin = tmin.max(t1.min(t2));
-                        tmax = tmax.min(t1.max(t2));
-                    }
-                    if tmax < tmin {
+                // get the first voxel intersection by slab method
+                let forward_inverse = forward.recip();
+                let forward_sign = forward_inverse.signum();
+                let (current_block, face) = {
+                    let t1 = position.neg() * forward_inverse;
+                    let t2 = (world_dimensions.as_vec3() - *position) * forward_inverse;
+                    let tclose_v = t1.min(t2);
+                    let tfar_v = t1.max(t2);
+                    let axis = tclose_v.max_position();
+                    let tclose = tclose_v[axis].clamp(0.0, f32::INFINITY);
+                    let tfar = tfar_v.min_element();
+
+                    if tclose > tfar {
                         *self = Self::Empty;
                         return None;
                     }
-                    let point = *position + *forward * tmin;
-                    point.as_usizevec3()
+                    *position += *forward * tclose;
+                    let block = position
+                        .floor()
+                        .clamp(Vec3::ZERO, (*world_dimensions - 1).as_vec3())
+                        .as_usizevec3();
+
+                    let face = match axis {
+                        0 => {
+                            if forward_sign.x.is_sign_negative() {
+                                Face::LEFT
+                            } else {
+                                Face::RIGHT
+                            }
+                        }
+                        1 => {
+                            if forward_sign.y.is_sign_negative() {
+                                Face::TOP
+                            } else {
+                                Face::BOTTOM
+                            }
+                        }
+                        2 => {
+                            if forward_sign.z.is_sign_negative() {
+                                Face::BACK
+                            } else {
+                                Face::FRONT
+                            }
+                        }
+                        _ => unreachable!(),
+                    };
+                    (block, face)
                 };
 
-                let step = forward.map(|x| x.signum()).as_isizevec3();
+                if current_block.x >= world_dimensions.x
+                    || current_block.y >= world_dimensions.y
+                    || current_block.z >= world_dimensions.z
+                {
+                    *self = Self::Empty;
+                    return None;
+                }
+
+                let step = forward_sign.as_isizevec3();
                 let delta = forward_inverse.abs();
                 let t = {
-                    let select = forward.map(|x| 0.5 + 0.5 * x.signum());
+                    let select = 0.5 + 0.5 * forward_sign;
                     let planes = current_block.as_vec3() + select;
                     (planes - *position) * forward_inverse
                 };
@@ -83,7 +123,7 @@ impl Iterator for VoxelTraverser {
                     delta,
                     t,
                 };
-                Some((current_block, Face::BACK))
+                Some((current_block, face))
             }
             VoxelTraverser::Active {
                 current_block,
@@ -235,6 +275,7 @@ impl Camera {
 mod tests {
     use super::*;
     use glam::Vec4;
+    const PI: f32 = core::f32::consts::PI;
 
     #[test]
     fn forward_vectors() {
@@ -243,8 +284,6 @@ mod tests {
         assert_abs_diff_eq!(forward.x, 0.0);
         assert_abs_diff_eq!(forward.y, 0.0);
         assert_abs_diff_eq!(forward.z, 1.0);
-
-        const PI: f32 = 3.14159265358979323846264338327950288;
 
         camera.yaw += PI / 2.0; // should turn right to -X
         let forward = camera.forward();
@@ -370,7 +409,7 @@ mod tests {
         assert_eq!(pos.x, 1);
         assert_eq!(pos.y, 1);
         assert_eq!(pos.z, 0);
-        assert_eq!(face, Face::BACK);
+        assert_eq!(face, Face::FRONT);
     }
 
     #[test]
