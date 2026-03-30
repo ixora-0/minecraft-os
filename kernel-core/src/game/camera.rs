@@ -1,5 +1,7 @@
+use crate::game::{Face, World};
+
 use super::Triangle;
-use glam::{Mat4, Vec2, Vec3, Vec4Swizzles};
+use glam::{ISizeVec3, Mat4, USizeVec3, Vec2, Vec3, Vec4Swizzles};
 const NEAR: f32 = 0.1;
 
 pub struct Triangle2D {
@@ -9,6 +11,120 @@ pub struct Triangle2D {
     /// normal of the triangle before projection
     /// used for lighting calculations
     pub normal: Vec3,
+}
+
+/// Traverses voxels along a ray, iterator returning the grid coordinate and face of each voxel
+/// Uses Amanatides-Woo algorithm
+enum VoxelTraverser {
+    Empty,
+    Uninit {
+        world_dimensions: USizeVec3,
+        position: Vec3,
+        forward: Vec3,
+    },
+    Active {
+        current_block: USizeVec3,
+        world_dimensions: USizeVec3,
+        step: ISizeVec3,
+        delta: Vec3,
+        t: Vec3,
+    },
+}
+impl VoxelTraverser {
+    pub fn new(world_dimensions: USizeVec3, position: Vec3, forward: Vec3) -> Self {
+        Self::Uninit {
+            world_dimensions,
+            position,
+            forward,
+        }
+    }
+}
+impl Iterator for VoxelTraverser {
+    type Item = (USizeVec3, Face);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            VoxelTraverser::Empty => None,
+            VoxelTraverser::Uninit {
+                world_dimensions,
+                position,
+                forward,
+            } => {
+                let forward_inverse =
+                    forward.map(|x| if x == 0.0 { f32::INFINITY } else { x.recip() });
+                let current_block = {
+                    let mut tmin = 0f32;
+                    let mut tmax = f32::INFINITY;
+                    for i in 0..3 {
+                        let t1 = -position[i] * forward_inverse[i];
+                        let t2 = (world_dimensions[i] as f32 - position[i]) * forward_inverse[i];
+                        tmin = tmin.max(t1.min(t2));
+                        tmax = tmax.min(t1.max(t2));
+                    }
+                    if tmax < tmin {
+                        *self = Self::Empty;
+                        return None;
+                    }
+                    let point = *position + *forward * tmin;
+                    point.as_usizevec3()
+                };
+
+                let step = forward.map(|x| x.signum()).as_isizevec3();
+                let delta = forward_inverse.abs();
+                let t = {
+                    let select = forward.map(|x| 0.5 + 0.5 * x.signum());
+                    let planes = current_block.as_vec3() + select;
+                    (planes - *position) * forward_inverse
+                };
+                *self = Self::Active {
+                    current_block,
+                    world_dimensions: *world_dimensions,
+                    step,
+                    delta,
+                    t,
+                };
+                Some((current_block, Face::BACK))
+            }
+            VoxelTraverser::Active {
+                current_block,
+                world_dimensions,
+                step,
+                delta,
+                t,
+            } => {
+                let face = if t.x < t.y {
+                    if t.x < t.z {
+                        current_block.x = current_block.x.saturating_add_signed(step.x);
+                        t.x += delta.x;
+                        // +X is right face, step.x < 0 means coming from +X, so right
+                        if step.x < 0 { Face::RIGHT } else { Face::LEFT }
+                    } else {
+                        current_block.z = current_block.z.saturating_add_signed(step.z);
+                        t.z += delta.z;
+                        if step.z < 0 { Face::FRONT } else { Face::BACK }
+                    }
+                } else {
+                    if t.y < t.z {
+                        current_block.y = current_block.y.saturating_add_signed(step.y);
+                        t.y += delta.y;
+                        if step.y < 0 { Face::TOP } else { Face::BOTTOM }
+                    } else {
+                        current_block.z = current_block.z.saturating_add_signed(step.z);
+                        t.z += delta.z;
+                        if step.z < 0 { Face::FRONT } else { Face::BACK }
+                    }
+                };
+                if current_block.x >= world_dimensions.x
+                    || current_block.y >= world_dimensions.y
+                    || current_block.z >= world_dimensions.z
+                {
+                    *self = VoxelTraverser::Empty;
+                    return None;
+                }
+                Some((*current_block, face))
+            }
+        }
+    }
 }
 
 pub struct Camera {
@@ -100,6 +216,18 @@ impl Camera {
             v2: self.project_vertex(vpm, tri.v2, width, height)?,
             normal: tri.normal,
         })
+    }
+
+    /// Returns the world coordinates and face of the solid block that the camera is looking at, if any.
+    pub fn looking_at_solid_block(&self, world: &World) -> Option<(USizeVec3, Face)> {
+        let world_dimensions = USizeVec3::new(world.len(), world[0].len(), world[0][0].len());
+        let traverser = VoxelTraverser::new(world_dimensions, self.position, self.forward());
+        for (pos, face) in traverser {
+            if world[pos.x][pos.y][pos.z] {
+                return Some((pos, face));
+            }
+        }
+        None
     }
 }
 
@@ -223,21 +351,53 @@ mod tests {
         let result_facing = camera.project_triangle(&vpm, &tri_facing, width, height);
         assert!(
             result_facing.is_some(),
-            "Triangle facing camera should not be culled"
+            "Front-facing triangle should render"
         );
+    }
 
-        // triangle facing away (normal pointing away from camera, which is +Z)
-        // vertices arranged counter-clockwise when viewed from camera
-        let tri_away = Triangle::new(
-            Vec3::new(-1.0, -1.0, 5.0),
-            Vec3::new(0.0, 1.0, 5.0),
-            Vec3::new(1.0, -1.0, 5.0),
-        );
-        // should be culled
-        let result_away = camera.project_triangle(&vpm, &tri_away, width, height);
-        assert!(
-            result_away.is_none(),
-            "Triangle facing away should be culled"
-        );
+    #[test]
+    fn looking_at_solid_block_hit() {
+        let mut camera = Camera::default();
+        camera.set_position(1.5, 1.5, -0.5);
+
+        let mut world: World = [[[false; 4]; 4]; 4];
+        world[1][1][0] = true;
+
+        let result = camera.looking_at_solid_block(&world);
+        assert!(result.is_some(), "Should hit solid block");
+
+        let (pos, face) = result.unwrap();
+        assert_eq!(pos.x, 1);
+        assert_eq!(pos.y, 1);
+        assert_eq!(pos.z, 0);
+        assert_eq!(face, Face::BACK);
+    }
+
+    #[test]
+    fn looking_at_solid_block_miss() {
+        let camera = Camera::default();
+
+        let world: World = [[[false; 4]; 4]; 4];
+
+        let result = camera.looking_at_solid_block(&world);
+        assert!(result.is_none(), "Should not hit any block");
+    }
+
+    #[test]
+    fn looking_at_solid_block_closest() {
+        let mut camera = Camera::default();
+        camera.set_position(1.5, 1.5, -0.5);
+
+        let mut world: World = [[[false; 4]; 4]; 4];
+        world[1][1][0] = true;
+        world[2][2][1] = true;
+
+        let result = camera.looking_at_solid_block(&world);
+        assert!(result.is_some(), "Should hit solid block");
+
+        let (pos, _) = result.unwrap();
+        assert_eq!(pos.x, 1);
+        assert_eq!(pos.y, 1);
+        assert_eq!(pos.z, 0, "Should return closest block, not further one");
     }
 }

@@ -5,6 +5,7 @@ pub mod world;
 
 pub use camera::Camera;
 pub use screen::Screen;
+pub use world::World;
 
 pub struct Triangle {
     v0: Vec3,
@@ -27,4 +28,14 @@ impl Triangle {
     pub fn centroid(&self) -> Vec3 {
         (self.v0 + self.v1 + self.v2) / 3.0
     }
+}
+
+#[derive(PartialEq, Debug)]
+pub enum Face {
+    FRONT,
+    BACK,
+    TOP,
+    BOTTOM,
+    LEFT,
+    RIGHT,
 }
