@@ -4,17 +4,20 @@ use glam::{USizeVec3, Vec3};
 use spin::{Lazy, Mutex};
 
 // World dimensions in blocks (x, y, z)
-const WORLD_X: usize = 4;
-const WORLD_Y: usize = 4;
-const WORLD_Z: usize = 4;
+const WORLD_X: usize = 8;
+const WORLD_Y: usize = 8;
+const WORLD_Z: usize = 8;
 
 pub type World = [[[bool; WORLD_Z]; WORLD_Y]; WORLD_X];
+pub const fn empty_world() -> World {
+    [[[false; WORLD_Z]; WORLD_Y]; WORLD_X]
+}
 
 /// Global world blocks storage.
 /// Indexed as [x][y][z], where true = solid block, false = air.
 pub static WORLD: Lazy<Mutex<World>> = Lazy::new(|| {
     // initialize with a 4-layer thick floor of solid blocks.
-    let mut w = [[[false; WORLD_Z]; WORLD_Y]; WORLD_X];
+    let mut w = empty_world();
     for y in 0..2 {
         for x in 0..WORLD_Y {
             for z in 0..WORLD_X {
