@@ -12,9 +12,10 @@ use kernel::{
     logger::{self, init_logger},
     memory::{self, BootInfoFrameAllocator},
     ps2,
+    ps2::mouse::MouseButtons,
     rendering::init_global_renderer,
 };
-use kernel_core::rendering::Color;
+use kernel_core::{game::world, rendering::Color};
 use pc_keyboard::KeyCode;
 use x86_64::VirtAddr;
 
@@ -83,7 +84,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     let (pixel_format, bytes_per_pixel) = kernel::rendering::with_global_renderer(|renderer| {
         (renderer.info.pixel_format, renderer.info.bytes_per_pixel)
     });
-    let mut screen = game::Screen::new(20, 20, 160 * 4, 90 * 4, pixel_format, bytes_per_pixel);
+    let mut screen = game::Screen::new(20, 20, 160 * 8, 90 * 8, pixel_format, bytes_per_pixel);
     let mut mesh = {
         let world = game::world::WORLD.lock();
         game::world::get_world_mesh(&world)
@@ -101,22 +102,30 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     }
     log::trace!("Entering loop");
 
-    const MOUSE_SENSITIVITY: f32 = 0.005;
+    const MOUSE_SENSITIVITY: f32 = 0.015;
     const SPEED: f32 = 1.0;
     const PI: f32 = core::f32::consts::PI;
     let (mut previous_mouse_x, mut previous_mouse_y) = {
         let mouse = ps2::PS2_MOUSE.lock();
         (mouse.x, mouse.y)
     };
+    let mut previous_mouse_button = MouseButtons::None;
     loop {
         // mouse
-        let (dx, dy) = {
+        let (dx, dy, left_clicked, right_clicked) = {
             let mouse = ps2::PS2_MOUSE.lock();
             let dx = mouse.x - previous_mouse_x;
             let dy = mouse.y - previous_mouse_y;
             previous_mouse_x = mouse.x;
             previous_mouse_y = mouse.y;
-            (dx, dy)
+
+            let left_clicked =
+                mouse.buttons.is_left_down() && !previous_mouse_button.is_left_down();
+            let right_clicked =
+                mouse.buttons.is_right_down() && !previous_mouse_button.is_right_down();
+            previous_mouse_button = mouse.buttons;
+
+            (dx, dy, left_clicked, right_clicked)
         };
         camera.yaw += dx as f32 * MOUSE_SENSITIVITY;
         camera.pitch -= dy as f32 * MOUSE_SENSITIVITY;
@@ -154,8 +163,38 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             }
         }
 
+        // targeted block
+        let targeted_block = {
+            let world = game::world::WORLD.lock();
+            camera.looking_at_solid_block(&world, 5.0)
+        };
+        if left_clicked {
+            if let Some((block_pos, ref _face)) = targeted_block {
+                let mut world = game::world::WORLD.lock();
+                world[block_pos.x][block_pos.y][block_pos.z] = false;
+                // have to rebuild world mesh
+                mesh = game::world::get_world_mesh(&world);
+            }
+        }
+        if right_clicked {
+            if let Some((block_pos, ref face)) = targeted_block {
+                let offset = face.get_offset();
+                let new = block_pos.wrapping_add_signed(offset);
+                if world::is_in_bounds(new) {
+                    let mut world = game::world::WORLD.lock();
+                    world[new.x][new.y][new.z] = true;
+                    mesh = game::world::get_world_mesh(&world);
+                }
+            }
+        }
+
         // rerender
         screen.render(&camera, &mut mesh);
+        if let Some((block_pos, _face)) = targeted_block {
+            screen.draw_block_outline(&camera, block_pos, Color::BLACK);
+        }
+        screen.draw_crosshair();
+
         kernel::rendering::with_global_renderer_mut(|renderer| {
             screen.flush(renderer);
         });

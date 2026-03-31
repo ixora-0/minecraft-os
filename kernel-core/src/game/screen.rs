@@ -4,9 +4,9 @@ use core::ptr;
 use embedded_graphics::{
     Drawable,
     prelude::{Dimensions, DrawTarget, Point, Primitive, Size},
-    primitives::{PrimitiveStyle, Rectangle, Triangle as egTriangle},
+    primitives::{Line, PrimitiveStyle, Rectangle, Triangle as egTriangle},
 };
-use glam::Vec3;
+use glam::{USizeVec3, Vec2, Vec3};
 use spin::Lazy;
 
 use crate::{
@@ -16,6 +16,9 @@ use crate::{
 
 const VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap());
 const LIGHT_DIRECTION: Lazy<Vec3> = Lazy::new(|| Vec3::new(-1.0, -1.0, 0.2).normalize());
+const CROSSHAIR_COLOR: Color = Color::BLACK;
+const CROSSHAIR_LEN: u32 = 5;
+const CROSSHAIR_THICKNESS: u32 = 2;
 
 pub struct Screen {
     /// bounding box within the global framebuffer
@@ -92,6 +95,83 @@ impl Screen {
             // t.into_styled(PrimitiveStyle::with_stroke(Color::RED, 1))
             //     .draw(&mut renderer);
         }
+    }
+
+    pub fn draw_block_outline(&mut self, camera: &Camera, block: USizeVec3, color: Color) {
+        let (wf, hf) = (
+            self.bounding_box.size.width as f32,
+            self.bounding_box.size.height as f32,
+        );
+        let vpm = camera.view_projection_matrix(wf, hf);
+
+        let (x, y, z) = (block.x as f32, block.y as f32, block.z as f32);
+        let corners = [
+            Vec3::new(x, y, z),
+            Vec3::new(x + 1.0, y, z),
+            Vec3::new(x + 1.0, y, z + 1.0),
+            Vec3::new(x, y, z + 1.0),
+            Vec3::new(x, y + 1.0, z),
+            Vec3::new(x + 1.0, y + 1.0, z),
+            Vec3::new(x + 1.0, y + 1.0, z + 1.0),
+            Vec3::new(x, y + 1.0, z + 1.0),
+        ];
+        const EDGES: [(usize, usize); 12] = [
+            // a
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0),
+            // b
+            (4, 5),
+            (5, 6),
+            (6, 7),
+            (7, 4),
+            // c
+            (0, 4),
+            (1, 5),
+            (2, 6),
+            (3, 7),
+        ];
+
+        let projected: [Option<Vec2>; 8] =
+            core::array::from_fn(|i| camera.project_vertex(&vpm, corners[i], wf, hf));
+
+        let style = PrimitiveStyle::with_stroke(color, 1);
+        let mut renderer = self.as_draw_target();
+        for (a, b) in EDGES {
+            if let (Some(p0), Some(p1)) = (projected[a], projected[b]) {
+                Line::new(
+                    Point::new(p0.x as i32, p0.y as i32),
+                    Point::new(p1.x as i32, p1.y as i32),
+                )
+                .into_styled(style)
+                .draw(&mut renderer)
+                .unwrap();
+            }
+        }
+    }
+
+    pub fn draw_crosshair(&mut self) {
+        let style = PrimitiveStyle::with_stroke(CROSSHAIR_COLOR, CROSSHAIR_THICKNESS);
+        let wf = self.bounding_box.size.width as f32;
+        let hf = self.bounding_box.size.height as f32;
+        let center = Point::new((wf / 2.0) as i32, (hf / 2.0) as i32);
+
+        let mut renderer = self.as_draw_target();
+        Line::new(
+            Point::new(center.x - CROSSHAIR_LEN as i32, center.y),
+            Point::new(center.x + CROSSHAIR_LEN as i32, center.y),
+        )
+        .into_styled(style)
+        .draw(&mut renderer)
+        .unwrap();
+        Line::new(
+            Point::new(center.x, center.y - CROSSHAIR_LEN as i32),
+            Point::new(center.x, center.y + CROSSHAIR_LEN as i32),
+        )
+        .into_styled(style)
+        .draw(&mut renderer)
+        .unwrap();
     }
 
     /// Copies the screen's temporary buffer into the global renderer.
