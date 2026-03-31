@@ -23,6 +23,7 @@ enum VoxelTraverser {
         world_dimensions: USizeVec3,
         position: Vec3,
         forward: Vec3,
+        max_distance: f32,
     },
     Active {
         current_block: USizeVec3,
@@ -30,14 +31,24 @@ enum VoxelTraverser {
         step: ISizeVec3,
         delta: Vec3,
         t: Vec3,
+        /// distance allowed to travel during the active phases
+        /// isn't changed during iteration while in Active
+        remaining_distance: f32,
     },
 }
 impl VoxelTraverser {
-    pub fn new(world_dimensions: USizeVec3, position: Vec3, forward: Vec3) -> Self {
+    /// set max distance to infinity if don't want to limit
+    pub fn new(
+        world_dimensions: USizeVec3,
+        position: Vec3,
+        forward: Vec3,
+        max_distance: f32,
+    ) -> Self {
         Self::Uninit {
             world_dimensions,
             position,
             forward,
+            max_distance,
         }
     }
 }
@@ -51,11 +62,13 @@ impl Iterator for VoxelTraverser {
                 world_dimensions,
                 position,
                 forward,
+                max_distance,
             } => {
                 // get the first voxel intersection by slab method
                 let forward_inverse = forward.recip();
                 let forward_sign = forward_inverse.signum();
-                let (current_block, face) = {
+
+                let (axis, tclose, tfar) = {
                     let t1 = position.neg() * forward_inverse;
                     let t2 = (world_dimensions.as_vec3() - *position) * forward_inverse;
                     let tclose_v = t1.min(t2);
@@ -63,44 +76,24 @@ impl Iterator for VoxelTraverser {
                     let axis = tclose_v.max_position();
                     let tclose = tclose_v[axis].clamp(0.0, f32::INFINITY);
                     let tfar = tfar_v.min_element();
-
-                    if tclose > tfar {
-                        *self = Self::Empty;
-                        return None;
-                    }
-                    *position += *forward * tclose;
-                    let block = position
-                        .floor()
-                        .clamp(Vec3::ZERO, (*world_dimensions - 1).as_vec3())
-                        .as_usizevec3();
-
-                    let face = match axis {
-                        0 => {
-                            if forward_sign.x.is_sign_negative() {
-                                Face::RIGHT
-                            } else {
-                                Face::LEFT
-                            }
-                        }
-                        1 => {
-                            if forward_sign.y.is_sign_negative() {
-                                Face::TOP
-                            } else {
-                                Face::BOTTOM
-                            }
-                        }
-                        2 => {
-                            if forward_sign.z.is_sign_negative() {
-                                Face::FRONT
-                            } else {
-                                Face::BACK
-                            }
-                        }
-                        _ => unreachable!(),
-                    };
-                    (block, face)
+                    (axis, tclose, tfar)
                 };
+                if tclose > tfar {
+                    *self = Self::Empty;
+                    return None;
+                }
 
+                let remaining_distance = *max_distance - tclose;
+                if remaining_distance < 0.0 {
+                    *self = Self::Empty;
+                    return None;
+                }
+
+                *position += *forward * tclose;
+                let current_block = position
+                    .floor()
+                    .clamp(Vec3::ZERO, (*world_dimensions - 1).as_vec3())
+                    .as_usizevec3();
                 if current_block.x >= world_dimensions.x
                     || current_block.y >= world_dimensions.y
                     || current_block.z >= world_dimensions.z
@@ -110,7 +103,8 @@ impl Iterator for VoxelTraverser {
                 }
 
                 let step = forward_sign.as_isizevec3();
-                let delta = forward_inverse.abs();
+                let delta_t = forward_inverse.abs();
+                // t[i] * forward[i] = i coordinate of next i plane, i = x/y/z
                 let t = {
                     let select = 0.5 + 0.5 * forward_sign;
                     let planes = current_block.as_vec3() + select;
@@ -120,8 +114,34 @@ impl Iterator for VoxelTraverser {
                     current_block,
                     world_dimensions: *world_dimensions,
                     step,
-                    delta,
+                    delta: delta_t,
                     t,
+                    remaining_distance,
+                };
+
+                let face = match axis {
+                    0 => {
+                        if forward_sign.x.is_sign_negative() {
+                            Face::RIGHT
+                        } else {
+                            Face::LEFT
+                        }
+                    }
+                    1 => {
+                        if forward_sign.y.is_sign_negative() {
+                            Face::TOP
+                        } else {
+                            Face::BOTTOM
+                        }
+                    }
+                    2 => {
+                        if forward_sign.z.is_sign_negative() {
+                            Face::FRONT
+                        } else {
+                            Face::BACK
+                        }
+                    }
+                    _ => unreachable!(),
                 };
                 Some((current_block, face))
             }
@@ -131,37 +151,38 @@ impl Iterator for VoxelTraverser {
                 step,
                 delta,
                 t,
+                remaining_distance,
             } => {
-                let face = if t.x < t.y {
-                    if t.x < t.z {
-                        current_block.x = current_block.x.wrapping_add_signed(step.x);
-                        t.x += delta.x;
-                        // +X is right face, step.x < 0 means coming from +X, so looking at right
-                        if step.x < 0 { Face::RIGHT } else { Face::LEFT }
-                    } else {
-                        current_block.z = current_block.z.wrapping_add_signed(step.z);
-                        t.z += delta.z;
-                        if step.z < 0 { Face::FRONT } else { Face::BACK }
-                    }
-                } else {
-                    if t.y < t.z {
-                        current_block.y = current_block.y.wrapping_add_signed(step.y);
-                        t.y += delta.y;
-                        if step.y < 0 { Face::TOP } else { Face::BOTTOM }
-                    } else {
-                        current_block.z = current_block.z.wrapping_add_signed(step.z);
-
-                        t.z += delta.z;
-                        if step.z < 0 { Face::FRONT } else { Face::BACK }
-                    }
-                };
-                if current_block.x >= world_dimensions.x
+                let axis = t.min_position();
+                // using indexing here is slow, but much more readable
+                let distance_traveled = t[axis];
+                current_block[axis] = current_block[axis].wrapping_add_signed(step[axis]);
+                if distance_traveled > *remaining_distance
+                    || current_block.x >= world_dimensions.x
                     || current_block.y >= world_dimensions.y
                     || current_block.z >= world_dimensions.z
                 {
                     *self = VoxelTraverser::Empty;
                     return None;
                 }
+
+                t[axis] += delta[axis];
+                let face = match axis {
+                    0 => {
+                        // +X is right face, step.x < 0 means coming from +X, so looking at right
+                        if step.x < 0 { Face::RIGHT } else { Face::LEFT }
+                    }
+                    1 => {
+                        // +Y is top face, step.Y < 0 means coming from +Y, so looking at top
+                        if step.y < 0 { Face::TOP } else { Face::BOTTOM }
+                    }
+                    2 => {
+                        // +Z is front face, step.Z < 0 means coming from +Z, so looking at front
+                        if step.z < 0 { Face::FRONT } else { Face::BACK }
+                    }
+                    _ => unreachable!(),
+                };
+
                 Some((*current_block, face))
             }
         }
@@ -260,9 +281,19 @@ impl Camera {
     }
 
     /// Returns the world coordinates and face of the solid block that the camera is looking at, if any.
-    pub fn looking_at_solid_block(&self, world: &World) -> Option<(USizeVec3, Face)> {
+    /// Set max_distance to f32::INFINITY for infinite distance.
+    pub fn looking_at_solid_block(
+        &self,
+        world: &World,
+        max_distance: f32,
+    ) -> Option<(USizeVec3, Face)> {
         let world_dimensions = USizeVec3::new(world.len(), world[0].len(), world[0][0].len());
-        let traverser = VoxelTraverser::new(world_dimensions, self.position, self.forward());
+        let traverser = VoxelTraverser::new(
+            world_dimensions,
+            self.position,
+            self.forward(),
+            max_distance,
+        );
         for (pos, face) in traverser {
             if world[pos.x][pos.y][pos.z] {
                 return Some((pos, face));
@@ -274,6 +305,10 @@ impl Camera {
 
 #[cfg(test)]
 mod tests {
+    use core::f32;
+
+    use crate::game::world::empty_world;
+
     use super::*;
     use glam::Vec4;
     const PI: f32 = core::f32::consts::PI;
@@ -400,10 +435,10 @@ mod tests {
         let mut camera = Camera::default();
         camera.set_position(1.5, 1.5, -0.5);
 
-        let mut world: World = [[[false; 4]; 4]; 4];
+        let mut world = empty_world();
         world[1][1][0] = true;
 
-        let result = camera.looking_at_solid_block(&world);
+        let result = camera.looking_at_solid_block(&world, f32::INFINITY);
         assert!(result.is_some(), "Should hit solid block");
 
         let (pos, face) = result.unwrap();
@@ -417,10 +452,46 @@ mod tests {
     fn looking_at_solid_block_miss() {
         let camera = Camera::default();
 
-        let world: World = [[[false; 4]; 4]; 4];
+        let world = empty_world();
 
-        let result = camera.looking_at_solid_block(&world);
+        let result = camera.looking_at_solid_block(&world, f32::INFINITY);
         assert!(result.is_none(), "Should not hit any block");
+    }
+
+    #[test]
+    fn looking_at_solid_block_max_distance_out_of_reach() {
+        let mut camera = Camera::default();
+        camera.set_position(1.5, 1.5, -0.5);
+
+        let mut world = empty_world();
+        world[1][1][1] = true;
+
+        let result = camera.looking_at_solid_block(&world, 1.4);
+        assert!(
+            result.is_none(),
+            "Block at z=1 should be out of reach with max_distance=1.4"
+        );
+    }
+
+    #[test]
+    fn looking_at_solid_block_max_distance_just_within_reach() {
+        let mut camera = Camera::default();
+        camera.set_position(1.5, 1.5, -0.5);
+
+        let mut world = empty_world();
+        world[1][1][1] = true;
+
+        let result = camera.looking_at_solid_block(&world, 1.51);
+        assert!(
+            result.is_some(),
+            "Block at z=1 should be within reach with max_distance=1.5"
+        );
+
+        let (pos, face) = result.unwrap();
+        assert_eq!(pos.x, 1);
+        assert_eq!(pos.y, 1);
+        assert_eq!(pos.z, 1);
+        assert_eq!(face, Face::BACK);
     }
 
     #[test]
@@ -428,11 +499,11 @@ mod tests {
         let mut camera = Camera::default();
         camera.set_position(1.5, 1.5, -0.5);
 
-        let mut world: World = [[[false; 4]; 4]; 4];
+        let mut world = empty_world();
         world[1][1][0] = true;
         world[2][2][1] = true;
 
-        let result = camera.looking_at_solid_block(&world);
+        let result = camera.looking_at_solid_block(&world, f32::INFINITY);
         assert!(result.is_some(), "Should hit solid block");
 
         let (pos, face) = result.unwrap();
@@ -447,9 +518,9 @@ mod tests {
         let mut camera = Camera::default();
         camera.set_position(0.5, 0.5, 5.0);
 
-        let world: World = [[[false; 4]; 4]; 4];
+        let world = empty_world();
 
-        let result = camera.looking_at_solid_block(&world);
+        let result = camera.looking_at_solid_block(&world, f32::INFINITY);
         assert!(
             result.is_none(),
             "Should not hit any block - looking away from world"
@@ -461,9 +532,9 @@ mod tests {
         let mut camera = Camera::default();
         camera.set_position(0.5, 0.5, 4.0);
 
-        let world: World = [[[false; 4]; 4]; 4];
+        let world = empty_world();
 
-        let result = camera.looking_at_solid_block(&world);
+        let result = camera.looking_at_solid_block(&world, f32::INFINITY);
         assert!(result.is_none(), "Camera at boundary shouldn't count");
     }
 
@@ -474,10 +545,10 @@ mod tests {
         camera.yaw = PI / 2.0; // -X
 
         let forward = camera.forward();
-        let mut world: World = [[[false; 4]; 4]; 4];
+        let mut world = empty_world();
         world[3][1][1] = true;
 
-        let result = camera.looking_at_solid_block(&world);
+        let result = camera.looking_at_solid_block(&world, f32::INFINITY);
         assert!(
             result.is_some(),
             "forward=({},{},{})",
@@ -499,10 +570,10 @@ mod tests {
         camera.set_position(1.5, 1.5, 4.5);
         camera.yaw = PI; // -Z
 
-        let mut world: World = [[[false; 4]; 4]; 4];
+        let mut world = empty_world();
         world[1][0][3] = true;
 
-        let result = camera.looking_at_solid_block(&world);
+        let result = camera.looking_at_solid_block(&world, f32::INFINITY);
         assert!(
             result.is_none(),
             "Should not hit block, ray passes through air at y=1"
@@ -513,9 +584,9 @@ mod tests {
     fn camera_inside_solid_block() {
         let mut camera = Camera::default();
         camera.set_position(0.5, 0.5, 0.5);
-        let mut world: World = [[[false; 4]; 4]; 4];
+        let mut world = empty_world();
         world[0][0][0] = true;
-        let result = camera.looking_at_solid_block(&world);
+        let result = camera.looking_at_solid_block(&world, f32::INFINITY);
         assert!(result.is_some(), "Should hit block camera is inside");
         let (pos, _) = result.unwrap();
         assert_eq!(pos.x, 0);
@@ -529,9 +600,9 @@ mod tests {
         camera.set_position(0.0, 0.0, 0.0);
         camera.yaw = -PI / 4.0;
         camera.pitch = libm::atanf(1.0 / libm::sqrtf(2.0));
-        let mut world: World = [[[false; 4]; 4]; 4];
+        let mut world = empty_world();
         world[3][3][3] = true;
-        let result = camera.looking_at_solid_block(&world);
+        let result = camera.looking_at_solid_block(&world, f32::INFINITY);
         assert!(result.is_some(), "Should hit the other corner");
         let (pos, _) = result.unwrap();
         assert_eq!(pos.x, 3);

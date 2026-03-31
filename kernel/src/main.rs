@@ -166,7 +166,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         // targeted block
         let targeted_block = {
             let world = game::world::WORLD.lock();
-            camera.looking_at_solid_block(&world)
+            camera.looking_at_solid_block(&world, 5.0)
         };
         if left_clicked {
             if let Some((block_pos, ref _face)) = targeted_block {
