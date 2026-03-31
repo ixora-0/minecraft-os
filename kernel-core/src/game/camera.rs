@@ -153,37 +153,34 @@ impl Iterator for VoxelTraverser {
                 t,
                 remaining_distance,
             } => {
-                let axis = t.min_position();
-                // using indexing here is slow, but much more readable
-                let distance_traveled = t[axis];
-                current_block[axis] = current_block[axis].wrapping_add_signed(step[axis]);
-                if distance_traveled > *remaining_distance
-                    || current_block.x >= world_dimensions.x
-                    || current_block.y >= world_dimensions.y
-                    || current_block.z >= world_dimensions.z
-                {
-                    *self = VoxelTraverser::Empty;
-                    return None;
+                macro_rules! advance_axis {
+                    ($axis:ident, $face_neg:expr, $face_pos:expr) => {{
+                        let distance_traveled = t.$axis;
+                        current_block.$axis = current_block.$axis.wrapping_add_signed(step.$axis);
+                        if distance_traveled > *remaining_distance
+                            || current_block.x >= world_dimensions.x
+                            || current_block.y >= world_dimensions.y
+                            || current_block.z >= world_dimensions.z
+                        {
+                            *self = VoxelTraverser::Empty;
+                            return None;
+                        }
+                        t.$axis += delta.$axis;
+                        let face = if step.$axis < 0 { $face_neg } else { $face_pos };
+                        Some((*current_block, face))
+                    }};
                 }
-
-                t[axis] += delta[axis];
-                let face = match axis {
-                    0 => {
-                        // +X is right face, step.x < 0 means coming from +X, so looking at right
-                        if step.x < 0 { Face::RIGHT } else { Face::LEFT }
+                if t.x < t.y {
+                    if t.x < t.z {
+                        advance_axis!(x, Face::RIGHT, Face::LEFT)
+                    } else {
+                        advance_axis!(z, Face::FRONT, Face::BACK)
                     }
-                    1 => {
-                        // +Y is top face, step.Y < 0 means coming from +Y, so looking at top
-                        if step.y < 0 { Face::TOP } else { Face::BOTTOM }
-                    }
-                    2 => {
-                        // +Z is front face, step.Z < 0 means coming from +Z, so looking at front
-                        if step.z < 0 { Face::FRONT } else { Face::BACK }
-                    }
-                    _ => unreachable!(),
-                };
-
-                Some((*current_block, face))
+                } else if t.y < t.z {
+                    advance_axis!(y, Face::TOP, Face::BOTTOM)
+                } else {
+                    advance_axis!(z, Face::FRONT, Face::BACK)
+                }
             }
         }
     }
