@@ -29,7 +29,9 @@ enum VoxelTraverser {
         current_block: USizeVec3,
         world_dimensions: USizeVec3,
         step: ISizeVec3,
+        /// value to add to t[axis] after each step
         delta: Vec3,
+        /// t[axis] * forward = next intersection of ray with plane in axis
         t: Vec3,
         /// distance allowed to travel during the active phases
         /// isn't changed during iteration while in Active
@@ -104,7 +106,6 @@ impl Iterator for VoxelTraverser {
 
                 let step = forward_sign.as_isizevec3();
                 let delta_t = forward_inverse.abs();
-                // t[i] * forward[i] = i coordinate of next i plane, i = x/y/z
                 let t = {
                     let select = 0.5 + 0.5 * forward_sign;
                     let planes = current_block.as_vec3() + select;
