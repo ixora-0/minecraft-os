@@ -192,7 +192,7 @@ mod tests {
             height: 16,
             pixel_format: PixelFormat::Rgb,
             bytes_per_pixel: 3,
-            stride: 16 * 3,
+            stride: 16,
         };
 
         let mut buffer = [0u8; INFO.byte_len];
