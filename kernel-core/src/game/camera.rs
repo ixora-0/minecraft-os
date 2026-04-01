@@ -3,17 +3,8 @@ use core::{f32, ops::Neg};
 use crate::game::{Face, World};
 
 use super::Triangle;
-use glam::{ISizeVec3, Mat4, USizeVec3, Vec2, Vec3, Vec4Swizzles};
+use glam::{ISizeVec3, Mat4, USizeVec3, Vec3, Vec4Swizzles};
 const NEAR: f32 = 0.1;
-
-pub struct Triangle2D {
-    pub v0: Vec2,
-    pub v1: Vec2,
-    pub v2: Vec2,
-    /// normal of the triangle before projection
-    /// used for lighting calculations
-    pub normal: Vec3,
-}
 
 /// Traverses voxels along a ray, iterator returning the grid coordinate and face of each voxel
 /// Uses Amanatides-Woo algorithm
@@ -231,7 +222,7 @@ impl Camera {
 
     /// Returns None if the vertex is behind the camera or fully outside clip space.
     /// NOTE: this means triangles partially off-screen get culled entirely. Good enough for now.
-    pub fn project_vertex(&self, vpm: &Mat4, v: Vec3, width: f32, height: f32) -> Option<Vec2> {
+    pub fn project_vertex(&self, vpm: &Mat4, v: Vec3, width: f32, height: f32) -> Option<Vec3> {
         let clip = vpm * v.extend(1.0); // extend to homogeneous coords
 
         // behind the camera
@@ -253,7 +244,7 @@ impl Camera {
         let px = (ndc.x + 1.0) / 2.0 * width;
         let py = (1.0 - ndc.y) / 2.0 * height;
 
-        Some(Vec2::new(px, py))
+        Some(Vec3::new(px, py, ndc.z))
     }
 
     pub fn project_triangle(
@@ -262,7 +253,7 @@ impl Camera {
         tri: &Triangle,
         width: f32,
         height: f32,
-    ) -> Option<Triangle2D> {
+    ) -> Option<Triangle> {
         // backface culling
         // if triangle is facing away from camera, don't render
         let to_camera = self.position - tri.v0;
@@ -270,7 +261,7 @@ impl Camera {
             return None;
         }
 
-        Some(Triangle2D {
+        Some(Triangle {
             v0: self.project_vertex(vpm, tri.v0, width, height)?,
             v1: self.project_vertex(vpm, tri.v1, width, height)?,
             v2: self.project_vertex(vpm, tri.v2, width, height)?,

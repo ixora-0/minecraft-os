@@ -1,9 +1,9 @@
 use core::{ops::Range, ptr};
 
 use bootloader_api::info::{FrameBuffer, FrameBufferInfo};
-use glam::{IVec2, USizeVec2};
+use glam::{IVec2, USizeVec2, Vec3};
 
-use crate::game::camera::Triangle2D;
+use crate::game::Triangle;
 
 use super::Color;
 
@@ -190,15 +190,38 @@ impl<'f> Renderer<'f> {
         }
     }
 
-    pub fn draw_line(&mut self, start: IVec2, end: IVec2, color: Color, width: u32) {
+    pub fn draw_line_2d(&mut self, start: IVec2, end: IVec2, color: Color, thickness: f32) {
         let _ = start;
         let _ = end;
         let _ = color;
-        let _ = width;
+        let _ = thickness;
         todo!()
     }
 
-    pub fn fill_triangle(&mut self, triangle: &Triangle2D, color: Color) {
+    pub fn draw_line(&mut self, start: Vec3, end: Vec3, color: Color, thickness: f32) {
+        if thickness <= 1.5 {
+            self.fill_line_thin(start, end, color);
+        } else {
+            self.fill_line_thick(start, end, color, thickness);
+        }
+    }
+
+    fn fill_line_thin(&mut self, start: Vec3, end: Vec3, color: Color) {
+        let _ = start;
+        let _ = end;
+        let _ = color;
+        todo!()
+    }
+
+    fn fill_line_thick(&mut self, start: Vec3, end: Vec3, color: Color, thickness: f32) {
+        let _ = start;
+        let _ = end;
+        let _ = color;
+        let _ = thickness;
+        todo!()
+    }
+
+    pub fn fill_triangle(&mut self, triangle: &Triangle, color: Color) {
         let _ = triangle;
         let _ = color;
         todo!()

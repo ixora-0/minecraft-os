@@ -1,7 +1,7 @@
 use alloc::{vec, vec::Vec};
 use bootloader_api::info::{FrameBufferInfo, PixelFormat};
 use core::ptr;
-use glam::{IVec2, USizeVec2, USizeVec3, Vec2, Vec3};
+use glam::{IVec2, USizeVec2, USizeVec3, Vec3};
 use spin::Lazy;
 
 use crate::{
@@ -13,13 +13,14 @@ const VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap(
 const LIGHT_DIRECTION: Lazy<Vec3> = Lazy::new(|| Vec3::new(-1.0, -1.0, 0.2).normalize());
 const CROSSHAIR_COLOR: Color = Color::BLACK;
 const CROSSHAIR_LEN: u32 = 5;
-const CROSSHAIR_THICKNESS: u32 = 2;
+const CROSSHAIR_THICKNESS: f32 = 1.0;
 
 pub struct Screen {
     /// bounding box within the global framebuffer
     pub bounding_box: Rectangle,
     /// temporary buffer used for rendering, can be flushed to the global framebuffer
     buffer: Vec<u8>,
+    depth_buffer: Vec<f32>,
     info: FrameBufferInfo,
 }
 
@@ -41,13 +42,13 @@ impl Screen {
             bytes_per_pixel,
             stride: width,
         };
-        let buffer = vec![0u8; byte_len];
         Self {
             bounding_box: Rectangle {
                 top_left: IVec2::new(x, y),
                 size: USizeVec2::new(width, height),
             },
-            buffer,
+            buffer: vec![0u8; byte_len],
+            depth_buffer: vec![0.0f32; width * height],
             info,
         }
     }
@@ -125,13 +126,13 @@ impl Screen {
             (3, 7),
         ];
 
-        let projected: [Option<Vec2>; 8] =
+        let projected: [Option<Vec3>; 8] =
             core::array::from_fn(|i| camera.project_vertex(&vpm, corners[i], wf, hf));
 
         let mut renderer = self.as_draw_target();
         for (a, b) in EDGES {
             if let (Some(p0), Some(p1)) = (projected[a], projected[b]) {
-                renderer.draw_line(p0.as_ivec2(), p1.as_ivec2(), color, 1);
+                renderer.draw_line(p0, p1, color, 1.0);
             }
         }
     }
@@ -142,13 +143,13 @@ impl Screen {
         let center = IVec2::new((wf / 2.0) as i32, (hf / 2.0) as i32);
 
         let mut renderer = self.as_draw_target();
-        renderer.draw_line(
+        renderer.draw_line_2d(
             IVec2::new(center.x - CROSSHAIR_LEN as i32, center.y),
             IVec2::new(center.x + CROSSHAIR_LEN as i32, center.y),
             CROSSHAIR_COLOR,
             CROSSHAIR_THICKNESS,
         );
-        renderer.draw_line(
+        renderer.draw_line_2d(
             IVec2::new(center.x, center.y - CROSSHAIR_LEN as i32),
             IVec2::new(center.x, center.y + CROSSHAIR_LEN as i32),
             CROSSHAIR_COLOR,
