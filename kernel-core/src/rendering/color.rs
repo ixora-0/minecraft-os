@@ -1,6 +1,5 @@
 use bootloader_api::info::PixelFormat;
 use core::fmt;
-use embedded_graphics::pixelcolor::{PixelColor, raw::RawU24};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Color {
@@ -122,10 +121,6 @@ impl fmt::Display for Fg<'_> {
         // ESC ~ FG#RRGGBB BEL
         write!(f, "\x1B~FG#{:02X}{:02X}{:02X}\x07", c.red, c.green, c.blue)
     }
-}
-
-impl PixelColor for Color {
-    type Raw = RawU24;
 }
 
 #[cfg(test)]

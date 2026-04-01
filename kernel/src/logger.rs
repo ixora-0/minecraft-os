@@ -1,13 +1,12 @@
 use core::fmt::Write;
+use glam::{IVec2, USizeVec2};
 use log::Level;
 use spin::Mutex;
 use x86_64::instructions::interrupts;
 
 use crate::rendering::{self, TextBox};
 use crate::serial_println;
-use embedded_graphics::geometry::{Point, Size};
-use embedded_graphics::primitives::Rectangle;
-use kernel_core::rendering::Color;
+use kernel_core::rendering::{Color, Rectangle};
 
 pub static LOGGER: TextBoxLogger = TextBoxLogger::default();
 
@@ -28,8 +27,8 @@ impl TextBoxLogger {
         let text_box = rendering::with_global_renderer(|renderer| {
             let (width, height) = (700, 350);
             TextBox::new(Rectangle {
-                top_left: Point::new(10, renderer.info.height as i32 - height as i32 - 10),
-                size: Size::new(width, height),
+                top_left: IVec2::new(10, renderer.info.height as i32 - height as i32 - 10),
+                size: USizeVec2::new(width, height),
             })
         });
         let mut text_box_ref = self.text_box.lock();

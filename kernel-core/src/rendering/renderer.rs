@@ -1,13 +1,43 @@
-use core::ptr;
+use core::{ops::Range, ptr};
 
 use bootloader_api::info::{FrameBuffer, FrameBufferInfo};
-use embedded_graphics::{
-    Pixel,
-    prelude::{Dimensions, DrawTarget, OriginDimensions, Size},
-    primitives::Rectangle,
-};
+use glam::{IVec2, USizeVec2};
+
+use crate::game::camera::Triangle2D;
 
 use super::Color;
+
+pub struct Pixel {
+    pub coord: IVec2,
+    pub color: Color,
+}
+pub struct Rectangle {
+    pub top_left: IVec2,
+    pub size: USizeVec2,
+}
+impl Rectangle {
+    pub fn bottom_right(&self) -> IVec2 {
+        self.top_left + self.size.as_ivec2()
+    }
+    pub fn intersection(&self, other: &Self) -> Option<Self> {
+        let intersection_top_left = self.top_left.max(other.top_left);
+        let intersection_bottom_right = self.bottom_right().min(other.bottom_right());
+
+        if intersection_top_left.x < intersection_bottom_right.x
+            && intersection_top_left.y < intersection_bottom_right.y
+        {
+            Some(Self {
+                top_left: intersection_top_left,
+                size: (intersection_bottom_right - intersection_top_left).as_usizevec2(),
+            })
+        } else {
+            None
+        }
+    }
+    pub fn rows(&self) -> Range<i32> {
+        self.top_left.y..self.bottom_right().y
+    }
+}
 
 unsafe fn fill_slice_48(dst: *mut u8, len: usize, pattern: &[u8; 48]) {
     if len == 0 {
@@ -42,8 +72,17 @@ impl<'f> Renderer<'f> {
     pub fn buffer_mut(&mut self) -> &mut [u8] {
         self.framebuffer
     }
-    fn render_pixel(&mut self, x: usize, y: usize, color: Color) {
+    pub fn bounding_box(&self) -> Rectangle {
+        Rectangle {
+            top_left: IVec2::ZERO,
+            size: USizeVec2::new(self.info.width, self.info.height),
+        }
+    }
+
+    fn render_pixel(&mut self, pixel: Pixel) {
         let (width, height) = (self.info.width, self.info.height);
+        let x = pixel.coord.x as usize;
+        let y = pixel.coord.y as usize;
         if !(0..width).contains(&x) || !(0..height).contains(&y) {
             return;
         }
@@ -59,43 +98,30 @@ impl<'f> Renderer<'f> {
         };
 
         let chunk = &mut self.framebuffer[byte_offset..];
-        color.write_to(chunk, self.info.pixel_format);
+        pixel.color.write_to(chunk, self.info.pixel_format);
     }
-}
 
-impl<'f> DrawTarget for Renderer<'f> {
-    type Color = Color;
-    /// Drawing operations can never fail.
-    type Error = core::convert::Infallible;
-
-    fn draw_iter<I>(&mut self, pixels: I) -> Result<(), Self::Error>
+    pub fn draw_iter<I>(&mut self, pixels: I)
     where
-        I: IntoIterator<Item = Pixel<Self::Color>>,
+        I: IntoIterator<Item = Pixel>,
     {
-        for Pixel(coordinates, color) in pixels.into_iter() {
-            let (x, y) = {
-                let c: (i32, i32) = coordinates.into();
-                (c.0 as usize, c.1 as usize)
-            };
-            self.render_pixel(x, y, color);
+        for pixel in pixels.into_iter() {
+            self.render_pixel(pixel);
         }
-
-        Ok(())
     }
 
-    fn fill_contiguous<I>(&mut self, area: &Rectangle, colors: I) -> Result<(), Self::Error>
+    pub fn fill_contiguous<I>(&mut self, area: &Rectangle, colors: I)
     where
-        I: IntoIterator<Item = Self::Color>,
+        I: IntoIterator<Item = Color>,
     {
         let mut colors = colors.into_iter();
 
-        let area = area.intersection(&self.bounding_box());
-        if area.bottom_right().is_none() {
-            return Ok(());
+        let Some(area) = area.intersection(&self.bounding_box()) else {
+            return;
         };
 
         let bpp = self.info.bytes_per_pixel;
-        let width = area.size.width as usize;
+        let width = area.size.x;
         let format = self.info.pixel_format;
 
         for y in area.rows() {
@@ -117,21 +143,18 @@ impl<'f> DrawTarget for Renderer<'f> {
                 }
             }
         }
-
-        Ok(())
     }
 
-    fn fill_solid(&mut self, area: &Rectangle, color: Self::Color) -> Result<(), Self::Error> {
-        let area = area.intersection(&self.bounding_box());
-        if area.bottom_right().is_none() {
-            return Ok(());
-        }
+    pub fn fill_solid(&mut self, area: &Rectangle, color: Color) {
+        let Some(area) = area.intersection(&self.bounding_box()) else {
+            return;
+        };
 
         let bpp = self.info.bytes_per_pixel;
-        let width = area.size.width as usize;
+        let width = area.size.x;
         let row_bytes = width * bpp;
         if row_bytes == 0 {
-            return Ok(());
+            return;
         }
 
         let format = self.info.pixel_format;
@@ -152,28 +175,33 @@ impl<'f> DrawTarget for Renderer<'f> {
                 );
             }
         }
-
-        Ok(())
     }
 
-    fn clear(&mut self, color: Self::Color) -> Result<(), Self::Error> {
+    pub fn clear(&mut self, color: Color) {
         debug_assert!(self.framebuffer.len() % self.info.bytes_per_pixel == 0);
         let len = self.framebuffer.len();
         if len == 0 {
-            return Ok(());
+            return;
         }
         let pattern =
             color.build_48_byte_pattern(self.info.pixel_format, self.info.bytes_per_pixel);
         unsafe {
             fill_slice_48(self.framebuffer.as_mut_ptr(), len, &pattern);
         }
-        Ok(())
     }
-}
 
-impl<'f> OriginDimensions for Renderer<'f> {
-    fn size(&self) -> Size {
-        Size::new(self.info.width as u32, self.info.height as u32)
+    pub fn draw_line(&mut self, start: IVec2, end: IVec2, color: Color, width: u32) {
+        let _ = start;
+        let _ = end;
+        let _ = color;
+        let _ = width;
+        todo!()
+    }
+
+    pub fn fill_triangle(&mut self, triangle: &Triangle2D, color: Color) {
+        let _ = triangle;
+        let _ = color;
+        todo!()
     }
 }
 
@@ -200,10 +228,10 @@ mod tests {
         let mut fb = unsafe { FrameBuffer::new(buffer_addr, INFO) };
 
         let mut renderer = Renderer::from_framebuffer(&mut fb);
-        renderer.clear(Color::WHITE).unwrap();
+        renderer.clear(Color::WHITE);
         assert!(buffer.iter().all(|&b| b == 255));
 
-        renderer.clear(Color::RED).unwrap();
+        renderer.clear(Color::RED);
         for chunk in buffer.chunks(3) {
             assert_eq!(chunk, &[0xFF, 0x00, 0x00]);
         }

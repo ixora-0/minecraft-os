@@ -1,17 +1,12 @@
 use alloc::{vec, vec::Vec};
 use bootloader_api::info::{FrameBufferInfo, PixelFormat};
 use core::ptr;
-use embedded_graphics::{
-    Drawable,
-    prelude::{Dimensions, DrawTarget, Point, Primitive, Size},
-    primitives::{Line, PrimitiveStyle, Rectangle, Triangle as egTriangle},
-};
-use glam::{USizeVec3, Vec2, Vec3};
+use glam::{IVec2, USizeVec2, USizeVec3, Vec2, Vec3};
 use spin::Lazy;
 
 use crate::{
     game::{Triangle, camera::Camera},
-    rendering::{Color, Renderer},
+    rendering::{Color, Rectangle, Renderer},
 };
 
 const VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap());
@@ -48,7 +43,10 @@ impl Screen {
         };
         let buffer = vec![0u8; byte_len];
         Self {
-            bounding_box: Rectangle::new(Point::new(x, y), Size::new(width as u32, height as u32)),
+            bounding_box: Rectangle {
+                top_left: IVec2::new(x, y),
+                size: USizeVec2::new(width, height),
+            },
             buffer,
             info,
         }
@@ -66,8 +64,8 @@ impl Screen {
             d2.partial_cmp(&d1).unwrap() // far to near
         });
         let (wf, hf) = (
-            self.bounding_box.size.width as f32,
-            self.bounding_box.size.height as f32,
+            self.bounding_box.size.x as f32,
+            self.bounding_box.size.y as f32,
         );
         let vpm = camera.view_projection_matrix(wf, hf);
         let projected_mesh = mesh
@@ -79,19 +77,13 @@ impl Screen {
         renderer.clear(*VOID_COLOR);
 
         // draw mesh
-        for tri in projected_mesh {
-            let light = -tri.normal.dot(*LIGHT_DIRECTION); // -1 to 1
+        for triangle in projected_mesh {
+            let light = -triangle.normal.dot(*LIGHT_DIRECTION); // -1 to 1
             const MIN_LIGHT: f32 = 0.1;
             let light = MIN_LIGHT + (1.0 - MIN_LIGHT) * ((light + 1.0) / 2.0); // min to 1
             let color = Color::WHITE.with_intensity_f(light);
 
-            let t = egTriangle::new(
-                Point::new(tri.v0.x as i32, tri.v0.y as i32),
-                Point::new(tri.v1.x as i32, tri.v1.y as i32),
-                Point::new(tri.v2.x as i32, tri.v2.y as i32),
-            );
-            t.into_styled(PrimitiveStyle::with_fill(color))
-                .draw(&mut renderer);
+            renderer.fill_triangle(&triangle, color);
             // t.into_styled(PrimitiveStyle::with_stroke(Color::RED, 1))
             //     .draw(&mut renderer);
         }
@@ -99,8 +91,8 @@ impl Screen {
 
     pub fn draw_block_outline(&mut self, camera: &Camera, block: USizeVec3, color: Color) {
         let (wf, hf) = (
-            self.bounding_box.size.width as f32,
-            self.bounding_box.size.height as f32,
+            self.bounding_box.size.x as f32,
+            self.bounding_box.size.y as f32,
         );
         let vpm = camera.view_projection_matrix(wf, hf);
 
@@ -136,42 +128,32 @@ impl Screen {
         let projected: [Option<Vec2>; 8] =
             core::array::from_fn(|i| camera.project_vertex(&vpm, corners[i], wf, hf));
 
-        let style = PrimitiveStyle::with_stroke(color, 1);
         let mut renderer = self.as_draw_target();
         for (a, b) in EDGES {
             if let (Some(p0), Some(p1)) = (projected[a], projected[b]) {
-                Line::new(
-                    Point::new(p0.x as i32, p0.y as i32),
-                    Point::new(p1.x as i32, p1.y as i32),
-                )
-                .into_styled(style)
-                .draw(&mut renderer)
-                .unwrap();
+                renderer.draw_line(p0.as_ivec2(), p1.as_ivec2(), color, 1);
             }
         }
     }
 
     pub fn draw_crosshair(&mut self) {
-        let style = PrimitiveStyle::with_stroke(CROSSHAIR_COLOR, CROSSHAIR_THICKNESS);
-        let wf = self.bounding_box.size.width as f32;
-        let hf = self.bounding_box.size.height as f32;
-        let center = Point::new((wf / 2.0) as i32, (hf / 2.0) as i32);
+        let wf = self.bounding_box.size.x as f32;
+        let hf = self.bounding_box.size.y as f32;
+        let center = IVec2::new((wf / 2.0) as i32, (hf / 2.0) as i32);
 
         let mut renderer = self.as_draw_target();
-        Line::new(
-            Point::new(center.x - CROSSHAIR_LEN as i32, center.y),
-            Point::new(center.x + CROSSHAIR_LEN as i32, center.y),
-        )
-        .into_styled(style)
-        .draw(&mut renderer)
-        .unwrap();
-        Line::new(
-            Point::new(center.x, center.y - CROSSHAIR_LEN as i32),
-            Point::new(center.x, center.y + CROSSHAIR_LEN as i32),
-        )
-        .into_styled(style)
-        .draw(&mut renderer)
-        .unwrap();
+        renderer.draw_line(
+            IVec2::new(center.x - CROSSHAIR_LEN as i32, center.y),
+            IVec2::new(center.x + CROSSHAIR_LEN as i32, center.y),
+            CROSSHAIR_COLOR,
+            CROSSHAIR_THICKNESS,
+        );
+        renderer.draw_line(
+            IVec2::new(center.x, center.y - CROSSHAIR_LEN as i32),
+            IVec2::new(center.x, center.y + CROSSHAIR_LEN as i32),
+            CROSSHAIR_COLOR,
+            CROSSHAIR_THICKNESS,
+        );
     }
 
     /// Copies the screen's temporary buffer into the global renderer.
@@ -190,16 +172,16 @@ impl Screen {
             "bytes_per_pixel mismatch"
         );
 
-        let area = global_renderer
+        let Some(area) = global_renderer
             .bounding_box()
-            .intersection(&self.bounding_box);
-        if area.bottom_right().is_none() {
+            .intersection(&self.bounding_box)
+        else {
             return;
-        }
+        };
         let dst_start_x = area.top_left.x as usize;
         let dst_start_y = area.top_left.y as usize;
-        let copy_width = area.size.width as usize;
-        let copy_height = area.size.height as usize;
+        let copy_width = area.size.x;
+        let copy_height = area.size.y;
 
         let src_start_x = (-self.bounding_box.top_left.x).max(0) as usize;
         let src_start_y = (-self.bounding_box.top_left.y).max(0) as usize;

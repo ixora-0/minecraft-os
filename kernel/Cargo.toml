@@ -19,7 +19,6 @@ doctest = false
 kernel-core = { path = "../kernel-core" }
 x86_64.workspace = true
 bootloader_api.workspace = true
-embedded-graphics.workspace = true
 log.workspace = true
 conquer-once.workspace = true
 spin.workspace = true
