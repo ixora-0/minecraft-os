@@ -74,13 +74,11 @@ impl log::Log for TextBoxLogger {
     }
 
     fn flush(&self) {
-        interrupts::without_interrupts(|| {
-            if let Some(text_box) = self.text_box.lock().as_mut() {
-                rendering::with_global_renderer_mut(|renderer| {
-                    text_box.render(renderer);
-                });
-            }
-        })
+        if let Some(text_box) = self.text_box.lock().as_mut() {
+            rendering::with_global_renderer_mut(|renderer| {
+                text_box.render(renderer);
+            });
+        }
     }
 }
 
