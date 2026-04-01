@@ -669,4 +669,185 @@ mod tests {
             assert_eq!(chunk, &[1, 2, 3, 0]);
         }
     }
+
+    #[test]
+    fn rectangle_intersection_overlapping() {
+        let a = Rectangle {
+            top_left: IVec2::new(0, 0),
+            size: USizeVec2::new(10, 10),
+        };
+        let b = Rectangle {
+            top_left: IVec2::new(5, 5),
+            size: USizeVec2::new(10, 10),
+        };
+        let result = a.intersection(&b);
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert_eq!(result.top_left, IVec2::new(5, 5));
+        assert_eq!(result.size, USizeVec2::new(5, 5));
+    }
+
+    #[test]
+    fn rectangle_intersection_non_overlapping() {
+        let a = Rectangle {
+            top_left: IVec2::new(0, 0),
+            size: USizeVec2::new(5, 5),
+        };
+        let b = Rectangle {
+            top_left: IVec2::new(10, 10),
+            size: USizeVec2::new(5, 5),
+        };
+        let result = a.intersection(&b);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn overlap_area_polygon_with_rect_fully_inside() {
+        let polygon = [
+            Vec2::new(0.0, 0.0),
+            Vec2::new(4.0, 0.0),
+            Vec2::new(4.0, 4.0),
+            Vec2::new(0.0, 4.0),
+        ];
+        let mut buffer_a = Vec::new();
+        let mut buffer_b = Vec::new();
+        let area = geometry::overlap_area_polygon_with_rect(
+            &polygon,
+            Vec2::new(0.0, 0.0),
+            Vec2::new(10.0, 10.0),
+            &mut buffer_a,
+            &mut buffer_b,
+        );
+        assert_eq!(area, 16.0);
+    }
+
+    #[test]
+    fn draw_line_horizontal_thickness_2() {
+        const W: usize = 10;
+        const H: usize = 10;
+        const INFO: FrameBufferInfo = FrameBufferInfo {
+            byte_len: W * H * 4,
+            width: W,
+            height: H,
+            pixel_format: PixelFormat::Rgb,
+            bytes_per_pixel: 4,
+            stride: W,
+        };
+
+        let mut buffer = [0u8; INFO.byte_len];
+        let buffer_addr = buffer.as_mut_ptr() as u64;
+        let mut fb = unsafe { FrameBuffer::new(buffer_addr, INFO) };
+
+        let mut renderer = Renderer::from_framebuffer(&mut fb);
+        renderer.draw_line(Vec2::new(1.0, 2.0), Vec2::new(7.0, 2.0), Color::RED, 2.0);
+
+        for y in 0..H {
+            for x in 0..W {
+                let offset = (y * W + x) * 4;
+                let is_red = buffer[offset] == 0xFF
+                    && buffer[offset + 1] == 0x00
+                    && buffer[offset + 2] == 0x00;
+                if (1..=2).contains(&y) && (1..7).contains(&x) {
+                    assert!(is_red, "pixel at ({}, {}) should be red", x, y);
+                } else {
+                    assert!(!is_red, "pixel at ({}, {}) should not be red", x, y);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn draw_line_vertical_thickness_2_6() {
+        const W: usize = 10;
+        const H: usize = 10;
+        const INFO: FrameBufferInfo = FrameBufferInfo {
+            byte_len: W * H * 4,
+            width: W,
+            height: H,
+            pixel_format: PixelFormat::Rgb,
+            bytes_per_pixel: 4,
+            stride: W,
+        };
+
+        let mut buffer = [0u8; INFO.byte_len];
+        let buffer_addr = buffer.as_mut_ptr() as u64;
+        let mut fb = unsafe { FrameBuffer::new(buffer_addr, INFO) };
+
+        let mut renderer = Renderer::from_framebuffer(&mut fb);
+        renderer.draw_line(Vec2::new(2.5, 1.0), Vec2::new(2.5, 7.0), Color::RED, 2.6);
+
+        for y in 0..H {
+            for x in 0..W {
+                let offset = (y * W + x) * 4;
+                let is_red = buffer[offset] == 0xFF
+                    && buffer[offset + 1] == 0x00
+                    && buffer[offset + 2] == 0x00;
+                if (1..=3).contains(&x) && (1..7).contains(&y) {
+                    assert!(is_red, "pixel at ({}, {}) should be red", x, y);
+                } else {
+                    assert!(!is_red, "pixel at ({}, {}) should not be red", x, y);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fill_triangle_fully_z_obstructed() {
+        const W: usize = 10;
+        const H: usize = 10;
+        const INFO: FrameBufferInfo = FrameBufferInfo {
+            byte_len: W * H * 4,
+            width: W,
+            height: H,
+            pixel_format: PixelFormat::Rgb,
+            bytes_per_pixel: 4,
+            stride: W,
+        };
+
+        let mut buffer = [0u8; INFO.byte_len];
+        let mut depth_buffer = [1.0; W * H];
+        let buffer_addr = buffer.as_mut_ptr() as u64;
+        let fb = unsafe { FrameBuffer::new(buffer_addr, INFO) };
+
+        let mut renderer = Renderer3d::new(&mut buffer, &mut depth_buffer, fb.info());
+        let triangle = Triangle {
+            v0: Vec3::new(0.0, 0.0, 0.5),
+            v1: Vec3::new(9.0, 0.0, 0.5),
+            v2: Vec3::new(4.0, 9.0, 0.5),
+            normal: Vec3::new(0.0, 0.0, 1.0),
+        };
+        renderer.fill_triangle(&triangle, Color::RED);
+
+        assert!(buffer.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn fill_triangle_not_z_obstructed() {
+        const W: usize = 10;
+        const H: usize = 10;
+        const INFO: FrameBufferInfo = FrameBufferInfo {
+            byte_len: W * H * 4,
+            width: W,
+            height: H,
+            pixel_format: PixelFormat::Rgb,
+            bytes_per_pixel: 4,
+            stride: W,
+        };
+
+        let mut buffer = [0u8; INFO.byte_len];
+        let mut depth_buffer = [0.0; W * H];
+        let buffer_addr = buffer.as_mut_ptr() as u64;
+        let fb = unsafe { FrameBuffer::new(buffer_addr, INFO) };
+
+        let mut renderer = Renderer3d::new(&mut buffer, &mut depth_buffer, fb.info());
+        let triangle = Triangle {
+            v0: Vec3::new(0.0, 0.0, 0.5),
+            v1: Vec3::new(9.0, 0.0, 0.5),
+            v2: Vec3::new(4.0, 9.0, 0.5),
+            normal: Vec3::new(0.0, 0.0, 1.0),
+        };
+        renderer.fill_triangle(&triangle, Color::RED);
+
+        assert!(buffer.iter().any(|&b| b != 0));
+    }
 }
