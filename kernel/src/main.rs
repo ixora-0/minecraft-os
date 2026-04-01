@@ -178,7 +178,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         }
         if right_clicked {
             if let Some((block_pos, ref face)) = targeted_block {
-                let offset = face.get_offset();
+                let offset = face.offset();
                 let new = block_pos.wrapping_add_signed(offset);
                 if world::is_in_bounds(new) {
                     let mut world = game::world::WORLD.lock();

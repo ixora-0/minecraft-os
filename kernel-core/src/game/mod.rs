@@ -30,7 +30,7 @@ impl Triangle {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Face {
     FRONT,
     BACK,
@@ -41,14 +41,34 @@ pub enum Face {
 }
 
 impl Face {
-    pub fn get_offset(&self) -> ISizeVec3 {
+    pub const ALL: [Face; 6] = [
+        Face::FRONT,
+        Face::BACK,
+        Face::TOP,
+        Face::BOTTOM,
+        Face::LEFT,
+        Face::RIGHT,
+    ];
+
+    pub fn offset(self) -> ISizeVec3 {
         match self {
             Face::FRONT => ISizeVec3::new(0, 0, 1),
             Face::BACK => ISizeVec3::new(0, 0, -1),
             Face::TOP => ISizeVec3::new(0, 1, 0),
             Face::BOTTOM => ISizeVec3::new(0, -1, 0),
-            Face::RIGHT => ISizeVec3::new(1, 0, 0),
             Face::LEFT => ISizeVec3::new(-1, 0, 0),
+            Face::RIGHT => ISizeVec3::new(1, 0, 0),
+        }
+    }
+
+    pub fn index(self) -> usize {
+        match self {
+            Face::FRONT => 0,
+            Face::BACK => 1,
+            Face::TOP => 2,
+            Face::BOTTOM => 3,
+            Face::LEFT => 4,
+            Face::RIGHT => 5,
         }
     }
 }

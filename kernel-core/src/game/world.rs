@@ -1,4 +1,4 @@
-use super::Triangle;
+use super::{Face, Triangle};
 use alloc::vec::Vec;
 use glam::{USizeVec3, Vec3};
 use spin::{Lazy, Mutex};
@@ -32,19 +32,18 @@ pub static WORLD: Lazy<Mutex<World>> = Lazy::new(|| {
 /// Represents one of the 6 cardinal directions of a cube face.
 /// Stores the direction offset and the 4 corner offsets for a face's quad.
 #[derive(Clone, Copy)]
-struct FaceDir {
-    /// Direction offset from block center to adjacent block (e.g., [0,0,1] = +Z face)
-    offset: [isize; 3],
+struct FaceQuad {
+    face: Face,
     /// The 4 corner offsets (as [x,y,z] in 0.0/1.0 units) for this face's quad.
     /// Clockwise winding order when normal points at us.
     quad: [[f32; 3]; 4],
 }
 
-/// The 6 faces of a cube, ordered: +Z, -Z, +Y, -Y, +X, -X
-const FACES: [FaceDir; 6] = [
+/// The 6 faces of a cube, ordered to match `Face::ALL`.
+const FACE_QUADS: [FaceQuad; 6] = [
     // +Z face (front)
-    FaceDir {
-        offset: [0, 0, 1],
+    FaceQuad {
+        face: Face::FRONT,
         quad: [
             [0.0, 0.0, 1.0],
             [0.0, 1.0, 1.0],
@@ -53,8 +52,8 @@ const FACES: [FaceDir; 6] = [
         ],
     },
     // -Z face (back)
-    FaceDir {
-        offset: [0, 0, -1],
+    FaceQuad {
+        face: Face::BACK,
         quad: [
             [1.0, 0.0, 0.0],
             [1.0, 1.0, 0.0],
@@ -63,8 +62,8 @@ const FACES: [FaceDir; 6] = [
         ],
     },
     // +Y face (top)
-    FaceDir {
-        offset: [0, 1, 0],
+    FaceQuad {
+        face: Face::TOP,
         quad: [
             [0.0, 1.0, 1.0],
             [0.0, 1.0, 0.0],
@@ -73,8 +72,8 @@ const FACES: [FaceDir; 6] = [
         ],
     },
     // -Y face (bottom)
-    FaceDir {
-        offset: [0, -1, 0],
+    FaceQuad {
+        face: Face::BOTTOM,
         quad: [
             [0.0, 0.0, 0.0],
             [0.0, 0.0, 1.0],
@@ -82,24 +81,24 @@ const FACES: [FaceDir; 6] = [
             [1.0, 0.0, 0.0],
         ],
     },
-    // +X face (right)
-    FaceDir {
-        offset: [1, 0, 0],
-        quad: [
-            [1.0, 0.0, 1.0],
-            [1.0, 1.0, 1.0],
-            [1.0, 1.0, 0.0],
-            [1.0, 0.0, 0.0],
-        ],
-    },
     // -X face (left)
-    FaceDir {
-        offset: [-1, 0, 0],
+    FaceQuad {
+        face: Face::LEFT,
         quad: [
             [0.0, 0.0, 0.0],
             [0.0, 1.0, 0.0],
             [0.0, 1.0, 1.0],
             [0.0, 0.0, 1.0],
+        ],
+    },
+    // +X face (right)
+    FaceQuad {
+        face: Face::RIGHT,
+        quad: [
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [1.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0],
         ],
     },
 ];
@@ -115,28 +114,17 @@ pub fn get_world_mesh(world: &[[[bool; WORLD_Z]; WORLD_Y]; WORLD_X]) -> Vec<Tria
                     continue;
                 }
 
-                for face in &FACES {
-                    // check if neighbor is a solid block (for face culling)
-                    // out-of-bounds coordinates are treated as air (exposed face)
-                    let [ox, oy, oz] = face.offset;
-                    let nx = x as isize + ox;
-                    let ny = y as isize + oy;
-                    let nz = z as isize + oz;
-                    let neighbor_solid = nx >= 0
-                        && nx < WORLD_X as isize
-                        && ny >= 0
-                        && ny < WORLD_Y as isize
-                        && nz >= 0
-                        && nz < WORLD_Z as isize
-                        && world[nx as usize][ny as usize][nz as usize];
-
-                    // skip this face if neighbor is solid (occluded)
-                    if neighbor_solid {
+                // check if neighbor is a solid block (for face culling)
+                // out-of-bounds coordinates are treated as air (exposed face)
+                let block_pos = USizeVec3::new(x, y, z);
+                let neighbor_solids = neighboring_solids(world, block_pos);
+                for face_quad in &FACE_QUADS {
+                    if neighbor_solids[face_quad.face.index()] {
                         continue;
                     }
 
                     // build quad from the face definition
-                    let [q0, q1, q2, q3] = face.quad;
+                    let [q0, q1, q2, q3] = face_quad.quad;
                     let fx = x as f32;
                     let fy = y as f32;
                     let fz = z as f32;
@@ -144,7 +132,8 @@ pub fn get_world_mesh(world: &[[[bool; WORLD_Z]; WORLD_Y]; WORLD_X]) -> Vec<Tria
                     let v = |q: [f32; 3]| Vec3::new(fx + q[0], fy + q[1], fz + q[2]);
                     let (v0, v1, v2, v3) = (v(q0), v(q1), v(q2), v(q3));
 
-                    let normal = Vec3::new(ox as f32, oy as f32, oz as f32);
+                    let offset = face_quad.face.offset();
+                    let normal = Vec3::new(offset.x as f32, offset.y as f32, offset.z as f32);
 
                     // split quad into two triangles
                     mesh.push(Triangle { v0, v1, v2, normal });
@@ -160,6 +149,17 @@ pub fn get_world_mesh(world: &[[[bool; WORLD_Z]; WORLD_Y]; WORLD_X]) -> Vec<Tria
     }
 
     mesh
+}
+
+pub fn neighboring_solids(world: &World, block: USizeVec3) -> [bool; 6] {
+    let mut neighbors = [false; 6];
+    for face in Face::ALL.iter().copied() {
+        let offset = face.offset();
+        let neighbor = block.wrapping_add_signed(offset);
+        neighbors[face.index()] =
+            is_in_bounds(neighbor) && world[neighbor.x][neighbor.y][neighbor.z];
+    }
+    neighbors
 }
 pub fn is_in_bounds(b: USizeVec3) -> bool {
     b.x < WORLD_X && b.y < WORLD_Y && b.z < WORLD_Z
