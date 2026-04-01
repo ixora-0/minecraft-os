@@ -48,7 +48,7 @@ mod geometry {
 
     /// Calculates the overlap area of a polygon with a rectangular bounding box using Sutherland–Hodgman algorithm.
     /// Needs two scratch buffers for intermediate storage.
-    pub fn overlap_area_polygin_with_rect(
+    pub fn overlap_area_polygon_with_rect(
         polygon: &[Vec2],
         top_left: Vec2,
         bottom_right: Vec2,
@@ -374,7 +374,7 @@ impl<'f> Renderer<'f> {
             for x in top_left.x..bottom_right.x {
                 let pixel_top_left = Vec2::new(x as f32, y as f32);
                 let pixel_bottom_right = pixel_top_left + 1.0;
-                let overlap_area = geometry::overlap_area_polygin_with_rect(
+                let overlap_area = geometry::overlap_area_polygon_with_rect(
                     &polygon,
                     pixel_top_left,
                     pixel_bottom_right,
