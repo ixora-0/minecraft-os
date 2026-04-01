@@ -13,7 +13,7 @@ const VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap(
 const LIGHT_DIRECTION: Lazy<Vec3> = Lazy::new(|| Vec3::new(-1.0, -1.0, 0.2).normalize());
 const CROSSHAIR_COLOR: Color = Color::BLACK;
 const CROSSHAIR_LEN: u32 = 5;
-const CROSSHAIR_THICKNESS: f32 = 1.0;
+const CROSSHAIR_THICKNESS: f32 = 3.0;
 
 pub struct Screen {
     /// bounding box within the global framebuffer
@@ -146,6 +146,9 @@ impl Screen {
         let center = IVec2::new((wf / 2.0) as i32, (hf / 2.0) as i32);
 
         let mut renderer = self.as_2d_draw_target();
+        // NOTE: draw line with thickness = 2.0 would draw a 3 thick instead
+        // due to some rounding issues
+        // good enough for now
         renderer.draw_line(
             IVec2::new(center.x - CROSSHAIR_LEN as i32, center.y),
             IVec2::new(center.x + CROSSHAIR_LEN as i32, center.y),

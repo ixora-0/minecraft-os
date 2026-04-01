@@ -191,11 +191,53 @@ impl<'f> Renderer<'f> {
     }
 
     pub fn draw_line(&mut self, start: IVec2, end: IVec2, color: Color, thickness: f32) {
-        let _ = start;
-        let _ = end;
-        let _ = color;
-        let _ = thickness;
-        todo!()
+        let thickness = thickness.max(1.0);
+        let radius = libm::floorf(thickness * 0.5).max(0.0) as i32;
+
+        let dx = (end.x - start.x) as f32;
+        let dy = (end.y - start.y) as f32;
+
+        let steps_float = dx.abs().max(dy.abs());
+        if steps_float == 0.0 {
+            self.draw_thick_pixel(start, color, radius);
+            return;
+        }
+
+        let steps = libm::ceilf(steps_float) as i32;
+        if steps == 0 {
+            self.draw_thick_pixel(start, color, radius);
+            return;
+        }
+
+        let step_x = dx / steps as f32;
+        let step_y = dy / steps as f32;
+
+        let mut x = start.x as f32;
+        let mut y = start.y as f32;
+
+        for _ in 0..=steps {
+            let point = IVec2::new(x as i32, y as i32);
+            self.draw_thick_pixel(point, color, radius);
+            x += step_x;
+            y += step_y;
+        }
+    }
+
+    fn draw_thick_pixel(&mut self, center: IVec2, color: Color, radius: i32) {
+        if radius <= 0 {
+            self.render_pixel(Pixel {
+                coord: center,
+                color,
+            });
+            return;
+        }
+
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                let coord = center + IVec2::new(dx, dy);
+                self.render_pixel(Pixel { coord, color });
+            }
+        }
     }
 }
 
