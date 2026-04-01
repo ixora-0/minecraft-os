@@ -4,7 +4,6 @@
 extern crate alloc;
 use bootloader_api::BootInfo;
 use core::panic::PanicInfo;
-use embedded_graphics::draw_target::DrawTarget;
 use glam::Vec3;
 use kernel::{
     BOOTLOADER_CONFIG,
