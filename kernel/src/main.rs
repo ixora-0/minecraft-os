@@ -4,7 +4,6 @@
 extern crate alloc;
 use bootloader_api::BootInfo;
 use core::panic::PanicInfo;
-use embedded_graphics::draw_target::DrawTarget;
 use glam::Vec3;
 use kernel::{
     BOOTLOADER_CONFIG,
@@ -189,7 +188,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         }
 
         // rerender
-        screen.render(&camera, &mut mesh);
+        screen.render(&camera, &mesh);
         if let Some((block_pos, _face)) = targeted_block {
             screen.draw_block_outline(&camera, block_pos, Color::BLACK);
         }

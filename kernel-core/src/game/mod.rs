@@ -8,10 +8,10 @@ pub use screen::Screen;
 pub use world::World;
 
 pub struct Triangle {
-    v0: Vec3,
-    v1: Vec3,
-    v2: Vec3,
-    normal: Vec3,
+    pub v0: Vec3,
+    pub v1: Vec3,
+    pub v2: Vec3,
+    pub normal: Vec3,
 }
 impl Triangle {
     /// order of vertices should be clockwise when normal is pointing at us

@@ -5,7 +5,6 @@ edition = "2024"
 
 [dependencies]
 bootloader_api.workspace = true
-embedded-graphics.workspace = true
 fontdue.workspace = true
 hashbrown.workspace = true
 libm.workspace = true

@@ -1,6 +1,6 @@
 use core::fmt;
-use embedded_graphics::primitives::Rectangle;
 use kernel_core::rendering::Color;
+use kernel_core::rendering::Rectangle;
 use kernel_core::rendering::Renderer;
 
 pub struct TextBox {

@@ -4,10 +4,10 @@ use core::{cmp::min, ops::Index, ops::Range};
 use super::Color;
 use alloc::{sync::Arc, vec::Vec};
 use fontdue::{Font, Metrics};
+use glam::IVec2;
 use hashbrown::HashMap;
 
-use crate::rendering::Renderer;
-use embedded_graphics::{Pixel, draw_target::DrawTarget, geometry::Point, primitives::Rectangle};
+use crate::rendering::{Pixel, Renderer, renderer::Rectangle};
 use spin::{Lazy, Mutex};
 
 /// Using ascii only font to hopefully make booting faster
@@ -328,9 +328,8 @@ impl TextBox {
     }
 
     pub fn max_visible_lines(&self) -> usize {
-        let effective_height = self.bounding_box.size.height as i32
-            - self.config.padding_bottom
-            - self.config.padding_top;
+        let effective_height =
+            self.bounding_box.size.y as i32 - self.config.padding_bottom - self.config.padding_top;
         let effective_line_height = self.line_height + self.config.line_spacing;
         (effective_height / effective_line_height) as usize
     }
@@ -417,7 +416,7 @@ impl TextBox {
 
         // Y value of baseline of current line, relative to top of bounding box
         let mut y =
-            self.bounding_box.size.height as i32 - self.config.padding_bottom - self.line_descent;
+            self.bounding_box.size.y as i32 - self.config.padding_bottom - self.line_descent;
         for line in lines_to_render.iter().rev() {
             let mut x = self.config.padding_left;
             let visual_line = visual_line_slice(line, &self.buffer);
@@ -448,10 +447,10 @@ impl TextBox {
             let px = i % metrics.width;
             let py = i / metrics.width;
             if *intensity != 0 {
-                Some(Pixel(
-                    Point::new(tx + px as i32, ty + py as i32),
-                    color.with_intensity(*intensity),
-                ))
+                Some(Pixel {
+                    coord: IVec2::new(tx + px as i32, ty + py as i32),
+                    color: color.with_intensity(*intensity),
+                })
             } else {
                 None
             }
@@ -477,13 +476,17 @@ impl core::fmt::Write for TextBox {
 mod tests {
     use super::*;
 
+    use glam::USizeVec2;
+
     #[test]
     fn loading_fonts() {
-        use embedded_graphics::prelude::Size;
         let config = TextBoxConfig::default();
         let _line_metrics = FONT
             .horizontal_line_metrics(config.font_size as f32)
             .expect("Could not get font metrics");
-        let _text_box = TextBox::new(Rectangle::new(Point::new(0, 0), Size::new(100, 100)));
+        let _text_box = TextBox::new(Rectangle {
+            top_left: IVec2::new(0, 0),
+            size: USizeVec2::new(100, 100),
+        });
     }
 }
