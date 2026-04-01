@@ -188,11 +188,11 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         }
 
         // rerender
-        screen.render(&camera, &mut mesh);
-        if let Some((block_pos, _face)) = targeted_block {
-            screen.draw_block_outline(&camera, block_pos, Color::BLACK);
-        }
-        screen.draw_crosshair();
+        screen.render(&camera, &mesh);
+        // if let Some((block_pos, _face)) = targeted_block {
+        //     screen.draw_block_outline(&camera, block_pos, Color::BLACK);
+        // }
+        // screen.draw_crosshair();
 
         kernel::rendering::with_global_renderer_mut(|renderer| {
             screen.flush(renderer);

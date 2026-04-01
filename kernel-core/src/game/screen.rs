@@ -65,12 +65,7 @@ impl Screen {
     }
 
     /// need mutable reference of mesh to sort by depth relative to the camera (painter's algorithm)
-    pub fn render(&mut self, camera: &Camera, mesh: &mut Vec<Triangle>) {
-        mesh.sort_unstable_by(|t1, t2| {
-            let d1 = (t1.centroid() - camera.position).length_squared();
-            let d2 = (t2.centroid() - camera.position).length_squared();
-            d2.partial_cmp(&d1).unwrap() // far to near
-        });
+    pub fn render(&mut self, camera: &Camera, mesh: &Vec<Triangle>) {
         let (wf, hf) = (
             self.bounding_box.size.x as f32,
             self.bounding_box.size.y as f32,
@@ -82,6 +77,7 @@ impl Screen {
 
         // clear screen
         self.as_2d_draw_target().clear(*VOID_COLOR);
+        self.depth_buffer.fill(0.0);
 
         // draw mesh
         let mut renderer = self.as_3d_draw_target();
