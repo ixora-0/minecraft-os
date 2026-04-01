@@ -1,7 +1,7 @@
 use alloc::{vec, vec::Vec};
 use bootloader_api::info::{FrameBufferInfo, PixelFormat};
 use core::ptr;
-use glam::{IVec2, USizeVec2, USizeVec3, Vec3};
+use glam::{IVec2, USizeVec2, USizeVec3, Vec2, Vec3};
 use spin::Lazy;
 
 use crate::{
@@ -12,8 +12,8 @@ use crate::{
 const VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap());
 const LIGHT_DIRECTION: Lazy<Vec3> = Lazy::new(|| Vec3::new(-1.0, -1.0, 0.2).normalize());
 const CROSSHAIR_COLOR: Color = Color::BLACK;
-const CROSSHAIR_LEN: u32 = 5;
-const CROSSHAIR_THICKNESS: f32 = 3.0;
+const CROSSHAIR_LEN: f32 = 5.0;
+const CROSSHAIR_THICKNESS: f32 = 2.0;
 
 pub struct Screen {
     /// bounding box within the global framebuffer
@@ -141,23 +141,18 @@ impl Screen {
     }
 
     pub fn draw_crosshair(&mut self) {
-        let wf = self.bounding_box.size.x as f32;
-        let hf = self.bounding_box.size.y as f32;
-        let center = IVec2::new((wf / 2.0) as i32, (hf / 2.0) as i32);
+        let center = self.bounding_box.size.as_vec2() * 0.5; // relative to screen's top left
 
         let mut renderer = self.as_2d_draw_target();
-        // NOTE: draw line with thickness = 2.0 would draw a 3 thick instead
-        // due to some rounding issues
-        // good enough for now
         renderer.draw_line(
-            IVec2::new(center.x - CROSSHAIR_LEN as i32, center.y),
-            IVec2::new(center.x + CROSSHAIR_LEN as i32, center.y),
+            Vec2::new(center.x - CROSSHAIR_LEN, center.y),
+            Vec2::new(center.x + CROSSHAIR_LEN, center.y),
             CROSSHAIR_COLOR,
             CROSSHAIR_THICKNESS,
         );
         renderer.draw_line(
-            IVec2::new(center.x, center.y - CROSSHAIR_LEN as i32),
-            IVec2::new(center.x, center.y + CROSSHAIR_LEN as i32),
+            Vec2::new(center.x, center.y - CROSSHAIR_LEN),
+            Vec2::new(center.x, center.y + CROSSHAIR_LEN),
             CROSSHAIR_COLOR,
             CROSSHAIR_THICKNESS,
         );
