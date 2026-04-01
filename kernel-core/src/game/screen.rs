@@ -6,7 +6,7 @@ use spin::Lazy;
 
 use crate::{
     game::{Triangle, camera::Camera},
-    rendering::{Color, Rectangle, Renderer},
+    rendering::{Color, Rectangle, Renderer, renderer::Renderer3d},
 };
 
 const VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap());
@@ -53,8 +53,15 @@ impl Screen {
         }
     }
 
-    fn as_draw_target(&mut self) -> Renderer<'_> {
+    fn as_2d_draw_target(&mut self) -> Renderer<'_> {
         Renderer::new(self.buffer.as_mut_slice(), self.info)
+    }
+    fn as_3d_draw_target(&mut self) -> Renderer3d<'_> {
+        Renderer3d::new(
+            self.buffer.as_mut_slice(),
+            self.depth_buffer.as_mut_slice(),
+            self.info,
+        )
     }
 
     /// need mutable reference of mesh to sort by depth relative to the camera (painter's algorithm)
@@ -74,10 +81,10 @@ impl Screen {
             .filter_map(|tri| camera.project_triangle(&vpm, tri, wf, hf));
 
         // clear screen
-        let mut renderer = self.as_draw_target();
-        renderer.clear(*VOID_COLOR);
+        self.as_2d_draw_target().clear(*VOID_COLOR);
 
         // draw mesh
+        let mut renderer = self.as_3d_draw_target();
         for triangle in projected_mesh {
             let light = -triangle.normal.dot(*LIGHT_DIRECTION); // -1 to 1
             const MIN_LIGHT: f32 = 0.1;
@@ -129,7 +136,7 @@ impl Screen {
         let projected: [Option<Vec3>; 8] =
             core::array::from_fn(|i| camera.project_vertex(&vpm, corners[i], wf, hf));
 
-        let mut renderer = self.as_draw_target();
+        let mut renderer = self.as_3d_draw_target();
         for (a, b) in EDGES {
             if let (Some(p0), Some(p1)) = (projected[a], projected[b]) {
                 renderer.draw_line(p0, p1, color, 1.0);
@@ -142,14 +149,14 @@ impl Screen {
         let hf = self.bounding_box.size.y as f32;
         let center = IVec2::new((wf / 2.0) as i32, (hf / 2.0) as i32);
 
-        let mut renderer = self.as_draw_target();
-        renderer.draw_line_2d(
+        let mut renderer = self.as_2d_draw_target();
+        renderer.draw_line(
             IVec2::new(center.x - CROSSHAIR_LEN as i32, center.y),
             IVec2::new(center.x + CROSSHAIR_LEN as i32, center.y),
             CROSSHAIR_COLOR,
             CROSSHAIR_THICKNESS,
         );
-        renderer.draw_line_2d(
+        renderer.draw_line(
             IVec2::new(center.x, center.y - CROSSHAIR_LEN as i32),
             IVec2::new(center.x, center.y + CROSSHAIR_LEN as i32),
             CROSSHAIR_COLOR,
