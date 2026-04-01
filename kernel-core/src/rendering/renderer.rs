@@ -220,19 +220,71 @@ impl<'f> Renderer3d<'f> {
         }
     }
 
-    fn fill_line_thin(&mut self, start: Vec3, end: Vec3, color: Color) {
-        let _ = start;
-        let _ = end;
-        let _ = color;
-        todo!()
+    /// Fills a ~1px thick line segment with the given color using bresenham's line algorithm.
+    fn fill_line_thin(&mut self, a: Vec3, b: Vec3, color: Color) {
+        let (w, h) = (self.info.width, self.info.height);
+
+        // precompute color bytes once, avoid format match in inner loop
+        let bpp = self.info.bytes_per_pixel;
+        let mut color_bytes = [0u8; 8];
+        color.write_to(&mut color_bytes, self.info.pixel_format);
+        let color_bytes = &color_bytes[..bpp];
+
+        let mut x = a.x as i32;
+        let mut y = a.y as i32;
+        let end_x = b.x as i32;
+        let end_y = b.y as i32;
+
+        let dx = (end_x - x).abs();
+        let dy = (end_y - y).abs();
+        let sx = if x < end_x { 1i32 } else { -1i32 };
+        let sy = if y < end_y { 1i32 } else { -1i32 };
+        let mut err = dx - dy;
+
+        // bresenham takes exactly max(dx, dy) steps
+        let steps = dx.max(dy);
+        let dz = if steps > 0 {
+            (b.z - a.z) / steps as f32
+        } else {
+            0.0
+        };
+        let mut z = a.z;
+
+        // HACK: add a small z bias to line segments to avoid z fighting when drawing block outlines
+        // ideally we would change the face texture instead of drawing line in 3d space,
+        // but this is good enough for now
+        const LINE_Z_BIAS: f32 = 0.0001;
+        loop {
+            if x >= 0 && (x as usize) < w && y >= 0 && (y as usize) < h {
+                let (xi, yi) = (x as usize, y as usize);
+                let depth_offset = yi * w + xi;
+                if z + LINE_Z_BIAS > self.depth_buffer[depth_offset] {
+                    self.depth_buffer[depth_offset] = z;
+                    let off = (yi * self.info.stride + xi) * bpp;
+                    self.buffer[off..off + bpp].copy_from_slice(color_bytes);
+                }
+            }
+
+            if x == end_x && y == end_y {
+                break;
+            }
+
+            let e2 = 2 * err;
+            if e2 > -dy {
+                err -= dy;
+                x += sx;
+            }
+            if e2 < dx {
+                err += dx;
+                y += sy;
+            }
+            z += dz;
+        }
     }
 
     fn fill_line_thick(&mut self, start: Vec3, end: Vec3, color: Color, thickness: f32) {
-        let _ = start;
-        let _ = end;
-        let _ = color;
-        let _ = thickness;
-        todo!()
+        let _ = (start, end, color, thickness);
+        todo!("Drawing thick lines in 3d space is not implemented for now")
     }
 
     /// Fills a triangle with the given color within 3d space.
