@@ -10,9 +10,8 @@ use kernel::{
     allocator::{self},
     logger::{self, init_logger},
     memory::{self, BootInfoFrameAllocator},
-    ps2,
-    ps2::mouse::MouseButtons,
-    rendering::init_global_renderer,
+    ps2::{self, mouse::MouseButtons},
+    rendering::{self, init_global_renderer},
 };
 use kernel_core::{game::world, rendering::Color};
 use pc_keyboard::KeyCode;
@@ -49,13 +48,14 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         // unwrap the framebuffer
         let framebuffer = frame_buffer_option.unwrap();
         init_global_renderer(framebuffer);
-    }
+    };
     // clear screen
-    kernel::rendering::with_global_renderer_mut(|renderer| {
+    let global_renderer_info = rendering::with_global_renderer_mut(|renderer| {
         renderer.clear(Color::LIGHT_GRAY);
+        renderer.info
     });
     logger::enable_rendering();
-    log::info!("Hello, World!");
+    log::info!("{:?}", global_renderer_info);
 
     const ASCII: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\nabcdefghijklmnopqrstuvwxyz\n0123456789\n!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
     log::info!("ASCII:\n{}", ASCII);
@@ -80,10 +80,20 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // yaw=--35 deg
     camera.pitch = -35.0_f32.to_radians();
 
-    let (pixel_format, bytes_per_pixel) = kernel::rendering::with_global_renderer(|renderer| {
-        (renderer.info.pixel_format, renderer.info.bytes_per_pixel)
-    });
-    let mut screen = game::Screen::new(20, 20, 160 * 8, 90 * 8, pixel_format, bytes_per_pixel);
+    let mut screen = {
+        let width = global_renderer_info.width.min(1280);
+        let x = (global_renderer_info.width - width) / 2;
+        let height = global_renderer_info.height.min(720);
+        let y = (global_renderer_info.height - height) / 2;
+        game::Screen::new(
+            x as i32,
+            y as i32,
+            width,
+            height,
+            global_renderer_info.pixel_format,
+            global_renderer_info.bytes_per_pixel,
+        )
+    };
     let mut mesh = {
         let world = game::world::WORLD.lock();
         game::world::get_world_mesh(&world)
@@ -101,8 +111,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     }
     log::trace!("Entering loop");
 
-    const MOUSE_SENSITIVITY: f32 = 0.015;
-    const SPEED: f32 = 1.0;
+    const MOUSE_SENSITIVITY: f32 = 0.0015;
+    const SPEED: f32 = 0.15;
     const PI: f32 = core::f32::consts::PI;
     let (mut previous_mouse_x, mut previous_mouse_y) = {
         let mouse = ps2::PS2_MOUSE.lock();
