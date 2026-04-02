@@ -1,12 +1,10 @@
+use crate::rendering;
+use crate::serial_println;
 use core::fmt::Write;
 use glam::{IVec2, USizeVec2};
+use kernel_core::rendering::{Color, Rectangle, TextBox};
 use log::Level;
 use spin::Mutex;
-use x86_64::instructions::interrupts;
-
-use crate::rendering::{self, TextBox};
-use crate::serial_println;
-use kernel_core::rendering::{Color, Rectangle};
 
 pub static LOGGER: TextBoxLogger = TextBoxLogger::default();
 
@@ -49,28 +47,26 @@ impl log::Log for TextBoxLogger {
         serial_println!("{:5}: {}", record.level(), record.args());
 
         let mut need_flush = false;
-        interrupts::without_interrupts(|| {
-            if let Some(text_box) = self.text_box.lock().as_mut() {
-                let prev_color = text_box.get_current_text_color();
-                let color = match record.level() {
-                    Level::Error => Color::RED,
-                    Level::Warn => Color::YELLOW,
-                    Level::Info => Color::WHITE,
-                    Level::Debug => Color::LIGHT_GRAY,
-                    Level::Trace => Color::DARK_GRAY,
-                };
-                writeln!(
-                    text_box,
-                    "{}{:5}: {}{}",
-                    color.fg(),
-                    record.level(),
-                    record.args(),
-                    prev_color.fg()
-                )
-                .unwrap();
-                need_flush = true;
-            }
-        });
+        if let Some(text_box) = self.text_box.lock().as_mut() {
+            let prev_color = text_box.get_current_text_color();
+            let color = match record.level() {
+                Level::Error => Color::RED,
+                Level::Warn => Color::YELLOW,
+                Level::Info => Color::WHITE,
+                Level::Debug => Color::LIGHT_GRAY,
+                Level::Trace => Color::DARK_GRAY,
+            };
+            writeln!(
+                text_box,
+                "{}{:5}: {}{}",
+                color.fg(),
+                record.level(),
+                record.args(),
+                prev_color.fg()
+            )
+            .unwrap();
+            need_flush = true;
+        };
 
         if need_flush {
             self.flush();

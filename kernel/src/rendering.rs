@@ -2,8 +2,8 @@ use bootloader_api::info::FrameBuffer;
 use kernel_core::rendering::Renderer;
 use spin::{Mutex, Once};
 
-mod text_box;
-pub use text_box::TextBox;
+pub use kernel_core::rendering::TextBox;
+
 use x86_64::instructions::interrupts;
 
 pub static GLOBAL_RENDERER: Mutex<Once<Renderer>> = Mutex::new(Once::new());
