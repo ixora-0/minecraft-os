@@ -200,8 +200,9 @@ mod tests {
         world[1][1][1] = true;
         let mesh = get_world_mesh(&world);
 
-        for face in &FACES {
-            let [ox, oy, oz] = face.offset;
+        for face in Face::ALL.iter() {
+            let offset = face.offset();
+            let [ox, oy, oz] = [offset.x, offset.y, offset.z];
             let n = Vec3::new(ox as f32, oy as f32, oz as f32);
             assert_eq!(
                 tris_with_normal(mesh.as_slice(), n),
