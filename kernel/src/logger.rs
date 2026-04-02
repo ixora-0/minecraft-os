@@ -2,7 +2,7 @@ use crate::rendering;
 use crate::serial_println;
 use core::fmt::Write;
 use glam::{IVec2, USizeVec2};
-use kernel_core::rendering::{Color, Rectangle, TextBox};
+use kernel_core::rendering::{Color, Frame, Rectangle, TextBox};
 use log::Level;
 use spin::Mutex;
 
@@ -24,8 +24,9 @@ impl TextBoxLogger {
     pub fn enable_rendering(&self) {
         let text_box = rendering::with_global_renderer(|renderer| {
             let (width, height) = (700, 350);
+            let info = renderer.info();
             TextBox::new(Rectangle {
-                top_left: IVec2::new(10, renderer.info.height as i32 - height as i32 - 10),
+                top_left: IVec2::new(10, info.height as i32 - height as i32 - 10),
                 size: USizeVec2::new(width, height),
             })
         });
@@ -70,11 +71,15 @@ impl log::Log for TextBoxLogger {
     }
 
     fn flush(&self) {
-        if let Some(text_box) = self.text_box.lock().as_mut() {
-            rendering::with_global_renderer_mut(|renderer| {
-                text_box.render(renderer);
-            });
-        }
+        rendering::with_global_renderer_mut(|renderer| {
+            let needs_present = {
+                let mut frame = renderer.frame();
+                self.draw_text_box(&mut frame)
+            };
+            if needs_present {
+                renderer.flush();
+            }
+        });
     }
 }
 
@@ -84,4 +89,21 @@ pub fn init_logger() {
 }
 pub fn enable_rendering() {
     LOGGER.enable_rendering();
+}
+
+impl TextBoxLogger {
+    fn draw_text_box(&self, frame: &mut Frame) -> bool {
+        let mut text_box_guard = self.text_box.lock();
+        if let Some(text_box) = text_box_guard.as_mut() {
+            let mut renderer = frame.renderer2d();
+            text_box.render(&mut renderer);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn render_overlay(&self, frame: &mut Frame) {
+        let _ = self.draw_text_box(frame);
+    }
 }

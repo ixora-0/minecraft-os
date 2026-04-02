@@ -51,8 +51,13 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     };
     // clear screen
     let global_renderer_info = rendering::with_global_renderer_mut(|renderer| {
-        renderer.clear(Color::LIGHT_GRAY);
-        renderer.info
+        {
+            let mut frame = renderer.frame();
+            frame.clear_color(Color::LIGHT_GRAY);
+            frame.clear_depth();
+        }
+        renderer.flush();
+        renderer.info()
     });
     logger::enable_rendering();
     log::info!("{:?}", global_renderer_info);
@@ -80,19 +85,12 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // yaw=--35 deg
     camera.pitch = -35.0_f32.to_radians();
 
-    let mut screen = {
+    let screen = {
         let width = global_renderer_info.width.min(1280);
         let x = (global_renderer_info.width - width) / 2;
         let height = global_renderer_info.height.min(720);
         let y = (global_renderer_info.height - height) / 2;
-        game::Screen::new(
-            x as i32,
-            y as i32,
-            width,
-            height,
-            global_renderer_info.pixel_format,
-            global_renderer_info.bytes_per_pixel,
-        )
+        game::Screen::new(x as i32, y as i32, width, height)
     };
     let mut mesh = {
         let world = game::world::WORLD.lock();
@@ -187,15 +185,20 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             }
         }
 
-        // rerender
-        screen.render(&camera, &mesh);
-        if let Some((block_pos, _face)) = targeted_block {
-            screen.draw_block_outline(&camera, block_pos, Color::BLACK);
-        }
-        screen.draw_crosshair();
-
         kernel::rendering::with_global_renderer_mut(|renderer| {
-            screen.flush(renderer);
+            {
+                let mut frame = renderer.frame();
+                frame.clear_color(Color::LIGHT_GRAY);
+                frame.clear_depth();
+
+                screen.render(&mut frame, &camera, &mesh);
+                if let Some((block_pos, _face)) = targeted_block {
+                    screen.draw_block_outline(&mut frame, &camera, block_pos, Color::BLACK);
+                }
+                screen.draw_crosshair(&mut frame);
+                logger::LOGGER.render_overlay(&mut frame);
+            }
+            renderer.flush();
         });
     }
 }
