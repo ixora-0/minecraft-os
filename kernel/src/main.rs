@@ -114,37 +114,27 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     const MOUSE_SENSITIVITY: f32 = 0.0015;
     const SPEED: f32 = 0.15;
     const PI: f32 = core::f32::consts::PI;
-    let (mut previous_mouse_x, mut previous_mouse_y) = {
-        let mouse = ps2::PS2_MOUSE.lock();
-        (mouse.x, mouse.y)
-    };
+    let (mut previous_mouse_x, mut previous_mouse_y) =
+        ps2::with_ps2_mouse(|mouse| (mouse.x, mouse.y));
     let mut previous_mouse_button = MouseButtons::None;
     loop {
         // mouse
-        let (dx, dy, left_clicked, right_clicked) = {
-            let mouse = ps2::PS2_MOUSE.lock();
-            let dx = mouse.x - previous_mouse_x;
-            let dy = mouse.y - previous_mouse_y;
-            previous_mouse_x = mouse.x;
-            previous_mouse_y = mouse.y;
+        let (mouse_x, mouse_y, mouse_buttons) =
+            ps2::with_ps2_mouse(|mouse| (mouse.x, mouse.y, mouse.buttons));
+        let dx = mouse_x - previous_mouse_x;
+        let dy = mouse_y - previous_mouse_y;
+        previous_mouse_x = mouse_x;
+        previous_mouse_y = mouse_y;
 
-            let left_clicked =
-                mouse.buttons.is_left_down() && !previous_mouse_button.is_left_down();
-            let right_clicked =
-                mouse.buttons.is_right_down() && !previous_mouse_button.is_right_down();
-            previous_mouse_button = mouse.buttons;
-
-            (dx, dy, left_clicked, right_clicked)
-        };
+        let left_clicked = mouse_buttons.is_left_down() && !previous_mouse_button.is_left_down();
+        let right_clicked = mouse_buttons.is_right_down() && !previous_mouse_button.is_right_down();
+        previous_mouse_button = mouse_buttons;
         camera.yaw += dx as f32 * MOUSE_SENSITIVITY;
         camera.pitch -= dy as f32 * MOUSE_SENSITIVITY;
         camera.pitch = camera.pitch.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
 
         // keyboard
-        let key_states = {
-            let keyboard = ps2::PS2_KEYBOARD.lock();
-            keyboard.key_states
-        };
+        let key_states = ps2::with_ps2_keyboard(|keyboard| keyboard.key_states);
         {
             // wasd moves on XZ plane
             let forward = camera.forward();
