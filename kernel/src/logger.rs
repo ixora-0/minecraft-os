@@ -24,14 +24,10 @@ impl TextBoxLogger {
     pub fn enable_rendering(&self) {
         let text_box = rendering::with_global_renderer(|renderer| {
             let (width, height) = (700, 350);
-            TextBox::new(
-                Rectangle {
-                    top_left: IVec2::new(10, renderer.info.height as i32 - height as i32 - 10),
-                    size: USizeVec2::new(width, height),
-                },
-                renderer.info.pixel_format,
-                renderer.info.bytes_per_pixel,
-            )
+            TextBox::new(Rectangle {
+                top_left: IVec2::new(10, renderer.info.height as i32 - height as i32 - 10),
+                size: USizeVec2::new(width, height),
+            })
         });
         let mut text_box_ref = self.text_box.lock();
         *text_box_ref = Some(text_box);
@@ -75,9 +71,8 @@ impl log::Log for TextBoxLogger {
 
     fn flush(&self) {
         if let Some(text_box) = self.text_box.lock().as_mut() {
-            text_box.render();
             rendering::with_global_renderer_mut(|renderer| {
-                text_box.flush(renderer);
+                text_box.render(renderer);
             });
         }
     }

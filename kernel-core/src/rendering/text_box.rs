@@ -1,17 +1,13 @@
 extern crate alloc;
-use core::{cmp::min, mem, ops::Index, ops::Range};
+use core::{cmp::min, ops::Index, ops::Range};
 
 use super::Color;
-use alloc::{sync::Arc, vec, vec::Vec};
-use bootloader_api::info::{FrameBufferInfo, PixelFormat};
+use alloc::{sync::Arc, vec::Vec};
 use fontdue::{Font, Metrics};
 use glam::IVec2;
 use hashbrown::HashMap;
 
-use crate::rendering::{
-    Pixel, Renderer,
-    renderer::{Rectangle, blit_buffer_to_renderer},
-};
+use crate::rendering::{Pixel, Renderer, renderer::Rectangle};
 use spin::{Lazy, Mutex};
 
 /// Using ascii only font to hopefully make booting faster
@@ -274,10 +270,7 @@ impl Parser {
 }
 
 pub struct TextBox {
-    /// The bounding box of the text box, within the global renderer's bounding box.
     bounding_box: Rectangle,
-    info: FrameBufferInfo,
-    pixel_buffer: Vec<u8>,
     config: TextBoxConfig,
     /// Relative x of currennt line within the bounding box.
     cursor_x: i32,
@@ -295,24 +288,10 @@ pub struct TextBox {
     parser: Parser,
 }
 impl TextBox {
-    pub fn new(bounding_box: Rectangle, pixel_format: PixelFormat, bytes_per_pixel: usize) -> Self {
+    pub fn new(bounding_box: Rectangle) -> Self {
         let config = TextBoxConfig::default();
-        let width = bounding_box.size.x;
-        let height = bounding_box.size.y;
-        let byte_len = width * height * bytes_per_pixel;
-        let info = FrameBufferInfo {
-            byte_len,
-            width,
-            height,
-            pixel_format,
-            bytes_per_pixel,
-            stride: width,
-        };
-        let pixel_buffer = vec![0u8; byte_len];
         let mut text_box = Self {
             bounding_box,
-            info,
-            pixel_buffer,
             config,
             buffer: alloc::vec![LogicalLine::default()],
             visual_lines: alloc::vec![VisualLine::default()],
@@ -425,10 +404,8 @@ impl TextBox {
         }
     }
 
-    pub fn render(&mut self) {
-        let mut pixel_buffer = mem::take(&mut self.pixel_buffer);
-        let mut renderer = Renderer::new(pixel_buffer.as_mut_slice(), self.info);
-        renderer.clear(self.config.color_bg);
+    pub fn render(&mut self, renderer: &mut Renderer) {
+        renderer.fill_solid(&self.bounding_box, self.config.color_bg);
 
         // visual lines within view
         let lines_to_render = {
@@ -446,28 +423,11 @@ impl TextBox {
             for glyph in visual_line {
                 let glyph_data = get_raster(glyph.printable_char(), self.config.font_size);
                 let (metrics, bitmap) = glyph_data.as_ref();
-                self.render_char(
-                    bitmap,
-                    *metrics,
-                    glyph.style.color_text,
-                    x,
-                    y,
-                    &mut renderer,
-                );
+                self.render_char(bitmap, *metrics, glyph.style.color_text, x, y, renderer);
                 x += self.calc_advance(metrics);
             }
             y -= self.line_height + self.config.line_spacing;
         }
-        self.pixel_buffer = pixel_buffer;
-    }
-
-    pub fn flush(&mut self, renderer: &mut Renderer) {
-        blit_buffer_to_renderer(
-            self.pixel_buffer.as_slice(),
-            &self.info,
-            &self.bounding_box,
-            renderer,
-        );
     }
 
     /// render bitmap at x and y. y is at baseline
@@ -480,8 +440,8 @@ impl TextBox {
         y: i32,
         renderer: &mut Renderer,
     ) {
-        let tx = x + metrics.xmin;
-        let ty = y - metrics.height as i32 - metrics.ymin;
+        let tx = self.bounding_box.top_left.x as i32 + x + metrics.xmin;
+        let ty = self.bounding_box.top_left.y as i32 + y - metrics.height as i32 - metrics.ymin;
 
         let pixels = bitmap.iter().enumerate().flat_map(|(i, intensity)| {
             let px = i % metrics.width;
@@ -516,8 +476,6 @@ impl core::fmt::Write for TextBox {
 mod tests {
     use super::*;
 
-    use alloc::vec;
-    use bootloader_api::info::{FrameBufferInfo, PixelFormat};
     use glam::USizeVec2;
 
     #[test]
@@ -526,48 +484,9 @@ mod tests {
         let _line_metrics = FONT
             .horizontal_line_metrics(config.font_size as f32)
             .expect("Could not get font metrics");
-        let _text_box = TextBox::new(
-            Rectangle {
-                top_left: IVec2::new(0, 0),
-                size: USizeVec2::new(100, 100),
-            },
-            PixelFormat::Rgb,
-            4,
-        );
-    }
-
-    #[test]
-    fn flush_copies_pixels() {
-        let mut text_box = TextBox::new(
-            Rectangle {
-                top_left: IVec2::new(2, 3),
-                size: USizeVec2::new(4, 4),
-            },
-            PixelFormat::Rgb,
-            4,
-        );
-        text_box.pixel_buffer.fill(0xAB);
-
-        let mut global_buffer = vec![0u8; 16 * 16 * 4];
-        let mut global_renderer = Renderer::new(
-            &mut global_buffer,
-            FrameBufferInfo {
-                byte_len: 16 * 16 * 4,
-                width: 16,
-                height: 16,
-                pixel_format: PixelFormat::Rgb,
-                bytes_per_pixel: 4,
-                stride: 16,
-            },
-        );
-
-        text_box.flush(&mut global_renderer);
-
-        for y in 3..7 {
-            for x in 2..6 {
-                let offset = (y * 16 + x) * 4;
-                assert_eq!(global_buffer[offset], 0xAB);
-            }
-        }
+        let _text_box = TextBox::new(Rectangle {
+            top_left: IVec2::new(0, 0),
+            size: USizeVec2::new(100, 100),
+        });
     }
 }

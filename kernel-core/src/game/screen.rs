@@ -1,14 +1,12 @@
 use alloc::{vec, vec::Vec};
 use bootloader_api::info::{FrameBufferInfo, PixelFormat};
+use core::ptr;
 use glam::{IVec2, USizeVec2, USizeVec3, Vec2, Vec3};
 use spin::Lazy;
 
 use crate::{
     game::{Triangle, camera::Camera},
-    rendering::{
-        Color, Rectangle, Renderer,
-        renderer::{Renderer3d, blit_buffer_to_renderer},
-    },
+    rendering::{Color, Rectangle, Renderer, renderer::Renderer3d},
 };
 
 const VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap());
@@ -165,12 +163,48 @@ impl Screen {
     /// Panics if pixel formats don't match.
     /// Caller should ensure the screen's pixel format matches the global renderer's.
     pub fn flush(&mut self, global_renderer: &mut Renderer) {
-        blit_buffer_to_renderer(
-            self.buffer.as_slice(),
-            &self.info,
-            &self.bounding_box,
-            global_renderer,
+        assert_eq!(
+            self.info.pixel_format, global_renderer.info.pixel_format,
+            "Pixel format mismatch: screen uses {:?}, global uses {:?}.",
+            self.info.pixel_format, global_renderer.info.pixel_format
         );
+        let bpp = self.info.bytes_per_pixel;
+        assert_eq!(
+            bpp, global_renderer.info.bytes_per_pixel,
+            "bytes_per_pixel mismatch"
+        );
+
+        let Some(area) = global_renderer
+            .bounding_box()
+            .intersection(&self.bounding_box)
+        else {
+            return;
+        };
+        let dst_start_x = area.top_left.x as usize;
+        let dst_start_y = area.top_left.y as usize;
+        let copy_width = area.size.x;
+        let copy_height = area.size.y;
+
+        let src_start_x = (-self.bounding_box.top_left.x).max(0) as usize;
+        let src_start_y = (-self.bounding_box.top_left.y).max(0) as usize;
+
+        // bytes per row to copy
+        let copy_bytes = (copy_width * bpp) as usize;
+
+        let src_ptr = self.buffer.as_ptr();
+        let dst_ptr = global_renderer.buffer_mut().as_mut_ptr();
+        for y in 0..copy_height {
+            let src_offset = ((src_start_y + y) * self.info.stride + src_start_x) * bpp;
+            let dst_offset = ((dst_start_y + y) * global_renderer.info.stride + dst_start_x) * bpp;
+
+            unsafe {
+                ptr::copy_nonoverlapping(
+                    src_ptr.add(src_offset),
+                    dst_ptr.add(dst_offset),
+                    copy_bytes,
+                );
+            }
+        }
     }
 }
 

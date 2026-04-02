@@ -393,52 +393,6 @@ impl<'f> Renderer<'f> {
     }
 }
 
-/// Copies a buffer of pixels to the renderer.
-/// `src_bounds` is bounding box of the source buffer, relative to the destination renderer's buffer
-pub fn blit_buffer_to_renderer(
-    src_buffer: &[u8],
-    src_info: &FrameBufferInfo,
-    src_bounds: &Rectangle,
-    dst_renderer: &mut Renderer,
-) {
-    assert_eq!(
-        src_info.pixel_format, dst_renderer.info.pixel_format,
-        "Pixel format mismatch: src uses {:?}, dst uses {:?}.",
-        src_info.pixel_format, dst_renderer.info.pixel_format
-    );
-    let bpp = src_info.bytes_per_pixel;
-    assert_eq!(
-        bpp, dst_renderer.info.bytes_per_pixel,
-        "bytes_per_pixel mismatch"
-    );
-
-    let Some(area) = dst_renderer.bounding_box().intersection(src_bounds) else {
-        return;
-    };
-
-    let dst_start_x = area.top_left.x as usize;
-    let dst_start_y = area.top_left.y as usize;
-    let copy_width = area.size.x;
-    let copy_height = area.size.y;
-
-    let src_start_x = (area.top_left.x - src_bounds.top_left.x) as usize;
-    let src_start_y = (area.top_left.y - src_bounds.top_left.y) as usize;
-
-    // bytes per row to copy
-    let copy_bytes = copy_width * bpp;
-
-    let src_ptr = src_buffer.as_ptr();
-    let dst_ptr = dst_renderer.buffer_mut().as_mut_ptr();
-    for y in 0..copy_height {
-        let src_offset = ((src_start_y + y) * src_info.stride + src_start_x) * bpp;
-        let dst_offset = ((dst_start_y + y) * dst_renderer.info.stride + dst_start_x) * bpp;
-
-        unsafe {
-            ptr::copy_nonoverlapping(src_ptr.add(src_offset), dst_ptr.add(dst_offset), copy_bytes);
-        }
-    }
-}
-
 pub struct Renderer3d<'f> {
     buffer: &'f mut [u8],
     depth_buffer: &'f mut [f32],
