@@ -70,11 +70,6 @@ impl log::Log for TextBoxLogger {
     fn log(&self, record: &log::Record) {
         serial_println!("{:5}: {}", record.level(), record.args());
 
-        if !self.visible.load(Ordering::Relaxed) {
-            return;
-        }
-
-        let mut should_flush = self.needs_flush.load(Ordering::Relaxed);
         if let Some(mut guard) = self.text_box.try_lock() {
             if let Some(text_box) = guard.as_mut() {
                 let prev_color = text_box.get_current_text_color();
@@ -94,13 +89,13 @@ impl log::Log for TextBoxLogger {
                     prev_color.fg()
                 )
                 .unwrap();
-                should_flush = true;
+                self.needs_flush.store(true, Ordering::Relaxed);
             }
         }
 
         // writeln! only push the bytes to the text box
         // needs to render and flush to global framebuffer
-        if should_flush {
+        if self.needs_flush.load(Ordering::Relaxed) && self.visible.load(Ordering::Relaxed) {
             self.needs_flush.store(true, Ordering::Relaxed);
             // interrupts are disabled usually when logging from an interrupt or panic handler
             // we should avoid doing heavy work in these cases
