@@ -27,7 +27,6 @@ impl Screen {
         }
     }
 
-    /// need mutable reference of mesh to sort by depth relative to the camera (painter's algorithm)
     pub fn render(&self, frame: &mut Frame, camera: &Camera, mesh: &[Triangle]) {
         let (wf, hf) = (
             self.bounding_box.size.x as f32,
@@ -60,7 +59,7 @@ impl Screen {
             let light = MIN_LIGHT + (1.0 - MIN_LIGHT) * ((light + 1.0) / 2.0); // min to 1
             let color = Color::WHITE.with_intensity_f(light);
 
-            renderer.fill_triangle(&triangle, color);
+            renderer.fill_triangle(&triangle, color, Some(&self.bounding_box));
             // t.into_styled(PrimitiveStyle::with_stroke(Color::RED, 1))
             //     .draw(&mut renderer);
         }
@@ -119,7 +118,13 @@ impl Screen {
         );
         for (a, b) in EDGES {
             if let (Some(p0), Some(p1)) = (projected[a], projected[b]) {
-                renderer.draw_line(p0 + offset, p1 + offset, color, 1.0);
+                renderer.draw_line(
+                    p0 + offset,
+                    p1 + offset,
+                    color,
+                    1.0,
+                    Some(&self.bounding_box),
+                );
             }
         }
     }

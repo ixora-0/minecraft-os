@@ -406,16 +406,48 @@ impl<'f> Renderer3d<'f> {
             info,
         }
     }
-    pub fn draw_line(&mut self, start: Vec3, end: Vec3, color: Color, thickness: f32) {
+    pub fn draw_line(
+        &mut self,
+        start: Vec3,
+        end: Vec3,
+        color: Color,
+        thickness: f32,
+        clip_rect: Option<&Rectangle>,
+    ) {
         if thickness <= 1.5 {
-            self.fill_line_thin(start, end, color);
+            self.fill_line_thin(start, end, color, clip_rect);
         } else {
-            self.fill_line_thick(start, end, color, thickness);
+            self.fill_line_thick(start, end, color, thickness, clip_rect);
         }
     }
 
     /// Fills a ~1px thick line segment with the given color using bresenham's line algorithm.
-    fn fill_line_thin(&mut self, a: Vec3, b: Vec3, color: Color) {
+    fn fill_line_thin(&mut self, a: Vec3, b: Vec3, color: Color, clip_rect: Option<&Rectangle>) {
+        let framebuffer_rect = Rectangle {
+            top_left: IVec2::ZERO,
+            size: USizeVec2::new(self.info.width, self.info.height),
+        };
+        let clip_rect = if let Some(rect) = clip_rect {
+            match rect.intersection(&framebuffer_rect) {
+                Some(intersection) => intersection,
+                None => return,
+            }
+        } else {
+            framebuffer_rect
+        };
+
+        if clip_rect.size.x == 0 || clip_rect.size.y == 0 {
+            return;
+        }
+
+        let clip_x_start = clip_rect.top_left.x.max(0);
+        let clip_y_start = clip_rect.top_left.y.max(0);
+        let clip_x_end = clip_rect.bottom_right().x.min(self.info.width as i32);
+        let clip_y_end = clip_rect.bottom_right().y.min(self.info.height as i32);
+        if clip_x_start >= clip_x_end || clip_y_start >= clip_y_end {
+            return;
+        }
+
         let (w, h) = (self.info.width, self.info.height);
 
         // precompute color bytes once, avoid format match in inner loop
@@ -449,7 +481,15 @@ impl<'f> Renderer3d<'f> {
         // but this is good enough for now
         const LINE_Z_BIAS: f32 = 0.0001;
         loop {
-            if x >= 0 && (x as usize) < w && y >= 0 && (y as usize) < h {
+            if x >= 0
+                && (x as usize) < w
+                && y >= 0
+                && (y as usize) < h
+                && x >= clip_x_start
+                && x < clip_x_end
+                && y >= clip_y_start
+                && y < clip_y_end
+            {
                 let (xi, yi) = (x as usize, y as usize);
                 let depth_offset = yi * w + xi;
                 if z + LINE_Z_BIAS > self.depth_buffer[depth_offset] {
@@ -476,14 +516,53 @@ impl<'f> Renderer3d<'f> {
         }
     }
 
-    fn fill_line_thick(&mut self, start: Vec3, end: Vec3, color: Color, thickness: f32) {
-        let _ = (start, end, color, thickness);
+    fn fill_line_thick(
+        &mut self,
+        start: Vec3,
+        end: Vec3,
+        color: Color,
+        thickness: f32,
+        clip_rect: Option<&Rectangle>,
+    ) {
+        let _ = (start, end, color, thickness, clip_rect);
         todo!("Drawing thick lines in 3d space is not implemented for now")
     }
 
     /// Fills a triangle with the given color within 3d space.
-    /// assumes vertices of input triangle are within bounds, with clockwise winding.
-    pub fn fill_triangle(&mut self, triangle: &Triangle, color: Color) {
+    /// Triangles can extend beyond the framebuffer and pixels outside `clip_rect`
+    /// (or outside the framebuffer when `clip_rect` is `None`) are skipped.
+    /// Assumes clockwise winding.
+    pub fn fill_triangle(
+        &mut self,
+        triangle: &Triangle,
+        color: Color,
+        clip_rect: Option<&Rectangle>,
+    ) {
+        let framebuffer_rect = Rectangle {
+            top_left: IVec2::ZERO,
+            size: USizeVec2::new(self.info.width, self.info.height),
+        };
+        let clip_rect = if let Some(rect) = clip_rect {
+            match rect.intersection(&framebuffer_rect) {
+                Some(intersection) => intersection,
+                None => return,
+            }
+        } else {
+            framebuffer_rect
+        };
+
+        if clip_rect.size.x == 0 || clip_rect.size.y == 0 {
+            return;
+        }
+
+        let clip_x_start = clip_rect.top_left.x.max(0) as usize;
+        let clip_y_start = clip_rect.top_left.y.max(0) as usize;
+        let clip_x_end = (clip_rect.bottom_right().x).min(self.info.width as i32) as usize; // exclusive
+        let clip_y_end = (clip_rect.bottom_right().y).min(self.info.height as i32) as usize; // exclusive
+        if clip_x_start >= clip_x_end || clip_y_start >= clip_y_end {
+            return;
+        }
+
         let (w, h) = (self.info.width, self.info.height);
         let (a, b, c) = (triangle.v0, triangle.v1, triangle.v2);
 
@@ -498,9 +577,23 @@ impl<'f> Renderer3d<'f> {
         }
         let inv_area = 1.0 / area;
 
-        // assuming vertices of input triangle is within bounds
-        let y_min = a.y.min(b.y).min(c.y) as usize;
-        let y_max = libm::ceilf(a.y.max(b.y).max(c.y)).min(h as f32) as usize;
+        let y_min_raw = a.y.min(b.y).min(c.y);
+        let y_max_raw = a.y.max(b.y).max(c.y);
+        let mut y_min = libm::floorf(y_min_raw).max(0.0) as isize;
+        let mut y_max = libm::ceilf(y_max_raw).min(h as f32) as isize;
+        let clip_y_start = clip_y_start as isize;
+        let clip_y_end = clip_y_end as isize; // exclusive
+        if y_min < clip_y_start {
+            y_min = clip_y_start;
+        }
+        if y_max > clip_y_end {
+            y_max = clip_y_end;
+        }
+        if y_min >= y_max {
+            return;
+        }
+        let y_min = y_min as usize;
+        let y_max = y_max as usize;
 
         // depth gradient along x for incremental update.
         // dz/dPx = [dwA/dPx * Az + dwB/dPx * Bz + dwC/dPx * Cz] / area
@@ -547,8 +640,16 @@ impl<'f> Renderer3d<'f> {
             // convert to pixel indices
             // pixel x samples at (x + 0.5),
             // so we want xi where (xi + 0.5) is inside [x_left, x_right].
-            let xi_left = libm::ceilf(x_left - 0.5).max(0.0);
-            let xi_right = libm::floorf(x_right - 0.5).min(w as f32 - 1.0);
+            let mut xi_left = libm::ceilf(x_left - 0.5).max(0.0) as isize;
+            let mut xi_right = libm::floorf(x_right - 0.5).min(w as f32 - 1.0) as isize;
+            let clip_x_start = clip_x_start as isize;
+            let clip_x_right = clip_x_end as isize - 1; // inclusive
+            if xi_left < clip_x_start {
+                xi_left = clip_x_start;
+            }
+            if xi_right > clip_x_right {
+                xi_right = clip_x_right;
+            }
             if xi_right < xi_left {
                 continue;
             }
@@ -792,6 +893,49 @@ mod tests {
     }
 
     #[test]
+    fn draw_line_thin_respects_clip_rect() {
+        const W: usize = 8;
+        const H: usize = 8;
+        const INFO: FrameBufferInfo = FrameBufferInfo {
+            byte_len: W * H * 4,
+            width: W,
+            height: H,
+            pixel_format: PixelFormat::Rgb,
+            bytes_per_pixel: 4,
+            stride: W,
+        };
+
+        let mut buffer = [0u8; INFO.byte_len];
+        let mut depth_buffer = [0.0; W * H];
+        let clip = Rectangle {
+            top_left: IVec2::new(2, 2),
+            size: USizeVec2::new(2, 2),
+        };
+        let mut renderer = Renderer3d::new(&mut buffer, &mut depth_buffer, INFO);
+        renderer.draw_line(
+            Vec3::new(0.0, 2.0, 0.6),
+            Vec3::new(5.0, 2.0, 0.6),
+            Color::RED,
+            1.0,
+            Some(&clip),
+        );
+
+        for y in 0..H {
+            for x in 0..W {
+                let offset = (y * W + x) * 4;
+                let is_red = buffer[offset] == 0xFF
+                    && buffer[offset + 1] == 0x00
+                    && buffer[offset + 2] == 0x00;
+                if y == 2 && (2..4).contains(&x) {
+                    assert!(is_red, "pixel at ({}, {}) should be red", x, y);
+                } else {
+                    assert!(!is_red, "pixel at ({}, {}) should not be red", x, y);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn fill_triangle_fully_z_obstructed() {
         const W: usize = 10;
         const H: usize = 10;
@@ -816,7 +960,7 @@ mod tests {
             v2: Vec3::new(4.0, 9.0, 0.5),
             normal: Vec3::new(0.0, 0.0, 1.0),
         };
-        renderer.fill_triangle(&triangle, Color::RED);
+        renderer.fill_triangle(&triangle, Color::RED, None);
 
         assert!(buffer.iter().all(|&b| b == 0));
     }
@@ -846,7 +990,7 @@ mod tests {
             v2: Vec3::new(4.0, 9.0, 0.5),
             normal: Vec3::new(0.0, 0.0, 1.0),
         };
-        renderer.fill_triangle(&triangle, Color::RED);
+        renderer.fill_triangle(&triangle, Color::RED, None);
 
         assert!(buffer.iter().any(|&b| b != 0));
     }

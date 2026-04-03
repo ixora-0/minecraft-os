@@ -220,8 +220,9 @@ impl Camera {
         proj * view
     }
 
-    /// Returns None if the vertex is behind the camera or fully outside clip space.
-    /// NOTE: this means triangles partially off-screen get culled entirely. Good enough for now.
+    /// Returns None if the vertex is behind the camera or behind the far plane.
+    ///
+    /// NOTE: Vertices outside the view are still returned.
     pub fn project_vertex(&self, vpm: &Mat4, v: Vec3, width: f32, height: f32) -> Option<Vec3> {
         let clip = vpm * v.extend(1.0); // extend to homogeneous coords
 
@@ -233,9 +234,8 @@ impl Camera {
         // convert to NDC, range (-1, 1) on each axis
         let ndc = clip.xyz() / clip.w;
 
-        // outside clip space
-        if ndc.x < -1.0 || ndc.x > 1.0 || ndc.y < -1.0 || ndc.y > 1.0 || ndc.z < -1.0 || ndc.z > 1.0
-        {
+        // behind the far plane
+        if ndc.z < -1.0 || ndc.z > 1.0 {
             return None;
         }
 
