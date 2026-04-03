@@ -6,6 +6,7 @@ use alloc::{sync::Arc, vec::Vec};
 use fontdue::{Font, Metrics};
 use glam::IVec2;
 use hashbrown::HashMap;
+use heapless::Deque;
 
 use crate::rendering::{Pixel, Renderer, renderer::Rectangle};
 use spin::{Lazy, Mutex};
@@ -19,30 +20,30 @@ static FONT: Lazy<Font> = Lazy::new(|| {
 const MAX_CACHE_ENTRIES: usize = 256;
 static GLYPH_CACHE: Lazy<Mutex<HashMap<(char, u32), Arc<(Metrics, Vec<u8>)>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
-// probably should use linked list or something here. vec for now.
-static CACHE_ORDER: Mutex<Vec<(char, u32)>> = Mutex::new(Vec::new());
+static CACHE_ORDER: Mutex<Deque<(char, u32), MAX_CACHE_ENTRIES>> = Mutex::new(Deque::new());
 
 /// returns metric and bitmap of glyph from FONT
 fn get_raster(c: char, size: u32) -> Arc<(Metrics, Vec<u8>)> {
     let size_key = size as u32;
     let mut cache = GLYPH_CACHE.lock();
 
-    // can update order here if we want LRU cache
     if let Some(entry) = cache.get(&(c, size_key)) {
+        // can update order here if we want LRU cache
         return Arc::clone(entry);
     }
 
     let mut order = CACHE_ORDER.lock();
     let entry = FONT.rasterize(c, size as f32);
     if cache.len() >= MAX_CACHE_ENTRIES {
-        if let Some(oldest) = order.first().copied() {
-            order.remove(0);
+        if let Some(oldest) = order.pop_front() {
             cache.remove(&oldest);
         }
     }
 
     let entry = Arc::new(entry);
-    order.push((c, size_key));
+    // only pushing to order when we also insert into cache
+    // and we alread checked for cache length exceeding capacity
+    unsafe { order.push_back_unchecked((c, size_key)) }
     cache.insert((c, size_key), Arc::clone(&entry));
     entry
 }

@@ -12,3 +12,4 @@ spin.workspace = true
 log.workspace = true
 glam.workspace = true
 approx.workspace = true
+heapless.workspace = true

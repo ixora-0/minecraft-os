@@ -486,6 +486,7 @@ dependencies = [
  "fontdue",
  "glam",
  "hashbrown 0.16.1",
+ "heapless",
  "libm",
  "log",
  "spin 0.10.0",
