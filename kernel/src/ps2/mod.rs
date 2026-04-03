@@ -6,8 +6,8 @@ pub mod mouse;
 
 use crate::ps2::keyboard::KeyboardType;
 
-pub use self::keyboard::{PS2_KEYBOARD, ScancodeSet, with_ps2_keyboard};
-pub use self::mouse::{PS2_MOUSE, with_ps2_mouse};
+pub use self::keyboard::{with_ps2_keyboard, ScancodeSet, PS2_KEYBOARD};
+pub use self::mouse::{with_ps2_mouse, with_ps2_mouse_mut, MouseClicks, PS2_MOUSE};
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]

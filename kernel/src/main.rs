@@ -10,7 +10,7 @@ use kernel::{
     allocator::{self},
     logger::{self, init_logger, toggle_visible},
     memory::{self, BootInfoFrameAllocator},
-    ps2::{self, mouse::MouseButtons},
+    ps2::{self},
     rendering::{self, init_global_renderer},
 };
 use kernel_core::{game::world, rendering::Color};
@@ -110,21 +110,11 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     const MOUSE_SENSITIVITY: f32 = 0.0015;
     const SPEED: f32 = 0.15;
     const PI: f32 = core::f32::consts::PI;
-    let (mut previous_mouse_x, mut previous_mouse_y) =
-        ps2::with_ps2_mouse(|mouse| (mouse.x, mouse.y));
-    let mut previous_mouse_button = MouseButtons::None;
     loop {
         // mouse
-        let (mouse_x, mouse_y, mouse_buttons) =
-            ps2::with_ps2_mouse(|mouse| (mouse.x, mouse.y, mouse.buttons));
-        let dx = mouse_x - previous_mouse_x;
-        let dy = mouse_y - previous_mouse_y;
-        previous_mouse_x = mouse_x;
-        previous_mouse_y = mouse_y;
+        let (dx, dy) = ps2::with_ps2_mouse_mut(|mouse| mouse.pop_delta());
+        let clicks = ps2::with_ps2_mouse_mut(|mouse| mouse.pop_clicks());
 
-        let left_clicked = mouse_buttons.is_left_down() && !previous_mouse_button.is_left_down();
-        let right_clicked = mouse_buttons.is_right_down() && !previous_mouse_button.is_right_down();
-        previous_mouse_button = mouse_buttons;
         camera.yaw += dx as f32 * MOUSE_SENSITIVITY;
         camera.pitch -= dy as f32 * MOUSE_SENSITIVITY;
         camera.pitch = camera.pitch.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
@@ -173,7 +163,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             let world = game::world::WORLD.lock();
             camera.looking_at_solid_block(&world, 5.0)
         };
-        if left_clicked {
+        if clicks.left {
             if let Some((block_pos, ref _face)) = targeted_block {
                 let mut world = game::world::WORLD.lock();
                 world[block_pos.x][block_pos.y][block_pos.z] = false;
@@ -181,7 +171,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                 mesh = game::world::get_world_mesh(&world);
             }
         }
-        if right_clicked {
+        if clicks.right {
             if let Some((block_pos, ref face)) = targeted_block {
                 let offset = face.offset();
                 let new = block_pos.wrapping_add_signed(offset);

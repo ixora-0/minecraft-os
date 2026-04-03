@@ -13,6 +13,16 @@ where
     })
 }
 
+pub fn with_ps2_mouse_mut<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut Ps2Mouse) -> R,
+{
+    interrupts::without_interrupts(|| {
+        let mut mouse = PS2_MOUSE.lock();
+        f(&mut mouse)
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]
 pub enum MouseButtons {
@@ -119,17 +129,30 @@ pub struct Ps2Mouse {
     pub x: i16,
     pub y: i16,
     pub buttons: MouseButtons,
+    pub previous_buttons: MouseButtons,
+    pub dx_this_frame: i16,
+    pub dy_this_frame: i16,
     /// Number of packet received (0-3)
     pub packet_state: u8,
     pub packet_bytes: [u8; 4],
     pub mouse_type: MouseType,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct MouseClicks {
+    pub left: bool,
+    pub right: bool,
+}
+
 impl const Default for Ps2Mouse {
     fn default() -> Self {
         Ps2Mouse {
             x: 0,
             y: 0,
             buttons: MouseButtons::None,
+            previous_buttons: MouseButtons::None,
+            dx_this_frame: 0,
+            dy_this_frame: 0,
             packet_state: 0,
             packet_bytes: [0; 4],
             mouse_type: MouseType::Unknown,
@@ -171,6 +194,9 @@ impl Ps2Mouse {
         let packet = MousePacket::from_bytes(byte_state, byte_x, byte_y, byte_4);
         self.x += packet.dx;
         self.y += packet.dy;
+        self.dx_this_frame += packet.dx;
+        self.dy_this_frame += packet.dy;
+        self.previous_buttons = self.buttons;
         self.buttons = packet.buttons;
 
         log::trace!(
@@ -185,5 +211,22 @@ impl Ps2Mouse {
     pub fn reset_position(&mut self) {
         self.x = 0;
         self.y = 0;
+    }
+
+    pub fn pop_clicks(&mut self) -> MouseClicks {
+        let clicks = MouseClicks {
+            left: self.buttons.is_left_down() && !self.previous_buttons.is_left_down(),
+            right: self.buttons.is_right_down() && !self.previous_buttons.is_right_down(),
+        };
+        self.previous_buttons = self.buttons;
+        clicks
+    }
+
+    pub fn pop_delta(&mut self) -> (i16, i16) {
+        let dx = self.dx_this_frame;
+        let dy = self.dy_this_frame;
+        self.dx_this_frame = 0;
+        self.dy_this_frame = 0;
+        (dx, dy)
     }
 }
