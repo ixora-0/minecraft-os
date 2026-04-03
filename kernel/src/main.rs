@@ -196,7 +196,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                     screen.draw_block_outline(&mut frame, &camera, block_pos, Color::BLACK);
                 }
                 screen.draw_crosshair(&mut frame);
-                logger::LOGGER.render_overlay(&mut frame);
+                logger::LOGGER.render(&mut frame);
             }
             renderer.flush();
         });
@@ -206,5 +206,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     log::error!("{}", info);
+    // log auto flush will fail because interrupts are disabled,
+    // have to explicitly flush
+    log::logger().flush();
     kernel::hlt_loop();
 }

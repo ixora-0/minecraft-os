@@ -4,7 +4,6 @@ use alloc::{vec, vec::Vec};
 use bootloader_api::info::{FrameBuffer, FrameBufferInfo};
 use kernel_core::rendering::Frame;
 use spin::{Mutex, Once};
-use x86_64::instructions::interrupts;
 
 pub const EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED: &str =
     "Global framebuffer not initialized. Probably haven't run init_framebuffer()";
@@ -46,6 +45,10 @@ impl GlobalRenderer {
         debug_assert_eq!(dst.len(), self.staging.len());
         dst.copy_from_slice(&self.staging);
     }
+
+    pub fn framebuffer_ptr(&mut self) -> *mut u8 {
+        self.framebuffer.buffer_mut().as_mut_ptr()
+    }
 }
 
 pub static GLOBAL_RENDERER: Mutex<Once<GlobalRenderer>> = Mutex::new(Once::new());
@@ -60,26 +63,33 @@ pub fn with_global_renderer<F, R>(f: F) -> R
 where
     F: FnOnce(&GlobalRenderer) -> R,
 {
-    interrupts::without_interrupts(|| {
-        let renderer_guard = GLOBAL_RENDERER.lock();
-        let renderer = renderer_guard
-            .get()
-            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
-        f(renderer)
-    })
+    let renderer_guard = GLOBAL_RENDERER.lock();
+    let renderer = renderer_guard
+        .get()
+        .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+    f(renderer)
 }
 
 pub fn with_global_renderer_mut<F, R>(f: F) -> R
 where
     F: FnOnce(&mut GlobalRenderer) -> R,
 {
-    interrupts::without_interrupts(|| {
-        let mut renderer_guard = GLOBAL_RENDERER.lock();
-        let renderer = renderer_guard
-            .get_mut()
-            .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
-        f(renderer)
-    })
+    let mut renderer_guard = GLOBAL_RENDERER.lock();
+    let renderer = renderer_guard
+        .get_mut()
+        .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+    f(renderer)
+}
+
+pub fn try_with_global_renderer_mut<F, R>(f: F) -> Option<R>
+where
+    F: FnOnce(&mut GlobalRenderer) -> R,
+{
+    let mut renderer_guard = GLOBAL_RENDERER.try_lock()?;
+    let renderer = renderer_guard
+        .get_mut()
+        .expect(EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED);
+    Some(f(renderer))
 }
 
 pub use kernel_core::rendering::TextBox;
