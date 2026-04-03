@@ -2,6 +2,7 @@ extern crate alloc;
 
 use alloc::{format, string::String};
 
+use glam::{IVec2, USizeVec2};
 use kernel_core::rendering::{Color, Frame, Rectangle, TextBox};
 
 use crate::ps2::keyboard::{KeyCode, KeyboardEvent};
@@ -10,7 +11,7 @@ const PROMPT: &str = "> ";
 /// Placeholder text shown in console when input is empty and console is inactive.
 const PLACEHOLDER_TEXT: &str = "Enter to type command";
 const MAX_INPUT_LEN: usize = 96;
-const FONT_SIZE: u32 = 18;
+const FONT_SIZE: u32 = 14;
 
 pub struct Console {
     bounds: Rectangle,
@@ -21,6 +22,15 @@ pub struct Console {
 }
 
 impl Console {
+    pub fn recommended_height() -> usize {
+        let mut tb = TextBox::new(Rectangle {
+            top_left: IVec2::new(0, 0),
+            size: USizeVec2::new(1, 1),
+        });
+        tb.set_font_size(FONT_SIZE);
+        tb.min_dimensions(MAX_INPUT_LEN, 1).y as usize
+    }
+
     pub fn new(bounds: Rectangle) -> Self {
         let text_box_bounds = Rectangle {
             top_left: bounds.top_left,

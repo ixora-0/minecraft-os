@@ -347,6 +347,28 @@ impl TextBox {
         (effective_height / effective_line_height) as usize
     }
 
+    /// Returns the minimum dimensions required to fit the given number of characters and lines
+    pub fn min_dimensions(&self, num_chars: usize, num_lines: usize) -> IVec2 {
+        let font_size = self.config.font_size as f32;
+        let mut max_advance = 0.0;
+
+        // loop through all printable ascii characters to find the max advance width
+        for c in b' '..=b'~' {
+            let metrics = FONT.metrics(c as char, font_size);
+            max_advance = libm::fmaxf(max_advance, metrics.advance_width);
+        }
+
+        let advance_per_char = (libm::roundf(max_advance) as i32) + self.config.letter_spacing;
+        let width = self.config.padding_left
+            + (num_chars as i32 * advance_per_char)
+            + self.config.padding_right;
+        let height = self.config.padding_top
+            + (num_lines as i32 * self.line_height)
+            + self.config.padding_bottom;
+
+        IVec2::new(width, height)
+    }
+
     pub fn scroll(&mut self, delta: isize) {
         if delta < 0 {
             self.scroll_offset = self.scroll_offset.saturating_add_signed(delta);

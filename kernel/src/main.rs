@@ -67,36 +67,33 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     });
     // calculate bounds for log and console panels.
     // console is positioned below log, both bottom-left of screen.
-    let (logger_bounds, console_bounds) = {
+    let mut console = {
         const LOG_WIDTH: usize = 800;
         const LOG_HEIGHT: usize = 450;
         const LEFT_MARGIN: usize = 12;
         const BOT_MARGIN: usize = 12;
-        const CONSOLE_HEIGHT: usize = 48;
         const CONSOLE_GAP: usize = 6;
 
         let available_width = global_renderer_info.width.saturating_sub(LEFT_MARGIN);
         let available_height = global_renderer_info.height.saturating_sub(BOT_MARGIN);
         let log_width = LOG_WIDTH.min(available_width);
         let log_height = LOG_HEIGHT.min(available_height);
+        let console_height = Console::recommended_height();
         let log_top =
-            (global_renderer_info.height - CONSOLE_HEIGHT - BOT_MARGIN - CONSOLE_GAP - log_height)
+            (global_renderer_info.height - console_height - BOT_MARGIN - CONSOLE_GAP - log_height)
                 .max(0) as i32;
         let log_left = LEFT_MARGIN as i32;
         let console_top = log_top + log_height as i32 + CONSOLE_GAP as i32;
-        (
-            Rectangle {
-                top_left: IVec2::new(log_left, log_top),
-                size: USizeVec2::new(log_width, log_height),
-            },
-            Rectangle {
-                top_left: IVec2::new(log_left, console_top),
-                size: USizeVec2::new(log_width, CONSOLE_HEIGHT),
-            },
-        )
+        logger::enable_rendering(Rectangle {
+            top_left: IVec2::new(log_left, log_top),
+            size: USizeVec2::new(log_width, log_height),
+        });
+        Console::new(Rectangle {
+            top_left: IVec2::new(log_left, console_top),
+            size: USizeVec2::new(log_width, console_height),
+        })
     };
 
-    logger::enable_rendering(logger_bounds);
     log::info!("{:?}", global_renderer_info);
 
     const ASCII: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\nabcdefghijklmnopqrstuvwxyz\n0123456789\n!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
@@ -132,7 +129,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         game::world::get_world_mesh(&world)
     };
 
-    let mut console = Console::new(console_bounds);
     let mut keyboard_events: Vec<KeyboardEvent> = Vec::with_capacity(64);
 
     {
