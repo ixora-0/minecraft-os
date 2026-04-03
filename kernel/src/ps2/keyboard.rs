@@ -1,8 +1,19 @@
 use spin::Mutex;
+use x86_64::instructions::interrupts;
 
 pub use pc_keyboard::{KeyCode, KeyState};
 
 pub static PS2_KEYBOARD: Mutex<Ps2Keyboard> = Mutex::new(Ps2Keyboard::default());
+
+pub fn with_ps2_keyboard<F, R>(f: F) -> R
+where
+    F: FnOnce(&Ps2Keyboard) -> R,
+{
+    interrupts::without_interrupts(|| {
+        let keyboard = PS2_KEYBOARD.lock();
+        f(&keyboard)
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyboardType {

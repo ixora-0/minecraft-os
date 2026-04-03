@@ -1,6 +1,17 @@
 use spin::Mutex;
+use x86_64::instructions::interrupts;
 
 pub static PS2_MOUSE: Mutex<Ps2Mouse> = Mutex::new(Ps2Mouse::default());
+
+pub fn with_ps2_mouse<F, R>(f: F) -> R
+where
+    F: FnOnce(&Ps2Mouse) -> R,
+{
+    interrupts::without_interrupts(|| {
+        let mouse = PS2_MOUSE.lock();
+        f(&mouse)
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[repr(u8)]

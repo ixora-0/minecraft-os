@@ -8,7 +8,7 @@ use glam::Vec3;
 use kernel::{
     BOOTLOADER_CONFIG,
     allocator::{self},
-    logger::{self, init_logger},
+    logger::{self, init_logger, toggle_visible},
     memory::{self, BootInfoFrameAllocator},
     ps2::{self, mouse::MouseButtons},
     rendering::{self, init_global_renderer},
@@ -51,8 +51,13 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     };
     // clear screen
     let global_renderer_info = rendering::with_global_renderer_mut(|renderer| {
-        renderer.clear(Color::LIGHT_GRAY);
-        renderer.info
+        {
+            let mut frame = renderer.frame();
+            frame.clear_color(Color::LIGHT_GRAY);
+            frame.clear_depth();
+        }
+        renderer.flush();
+        renderer.info()
     });
     logger::enable_rendering();
     log::info!("{:?}", global_renderer_info);
@@ -75,24 +80,15 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     use kernel_core::game;
     let mut camera = game::Camera::default();
     camera.set_position(-3.0, 5.0, -2.0);
-    // yaw=-50 deg
     camera.yaw = -50.0_f32.to_radians();
-    // yaw=--35 deg
     camera.pitch = -35.0_f32.to_radians();
 
-    let mut screen = {
+    let screen = {
         let width = global_renderer_info.width.min(1280);
         let x = (global_renderer_info.width - width) / 2;
         let height = global_renderer_info.height.min(720);
         let y = (global_renderer_info.height - height) / 2;
-        game::Screen::new(
-            x as i32,
-            y as i32,
-            width,
-            height,
-            global_renderer_info.pixel_format,
-            global_renderer_info.bytes_per_pixel,
-        )
+        game::Screen::new(x as i32, y as i32, width, height)
     };
     let mut mesh = {
         let world = game::world::WORLD.lock();
@@ -114,37 +110,27 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     const MOUSE_SENSITIVITY: f32 = 0.0015;
     const SPEED: f32 = 0.15;
     const PI: f32 = core::f32::consts::PI;
-    let (mut previous_mouse_x, mut previous_mouse_y) = {
-        let mouse = ps2::PS2_MOUSE.lock();
-        (mouse.x, mouse.y)
-    };
+    let (mut previous_mouse_x, mut previous_mouse_y) =
+        ps2::with_ps2_mouse(|mouse| (mouse.x, mouse.y));
     let mut previous_mouse_button = MouseButtons::None;
     loop {
         // mouse
-        let (dx, dy, left_clicked, right_clicked) = {
-            let mouse = ps2::PS2_MOUSE.lock();
-            let dx = mouse.x - previous_mouse_x;
-            let dy = mouse.y - previous_mouse_y;
-            previous_mouse_x = mouse.x;
-            previous_mouse_y = mouse.y;
+        let (mouse_x, mouse_y, mouse_buttons) =
+            ps2::with_ps2_mouse(|mouse| (mouse.x, mouse.y, mouse.buttons));
+        let dx = mouse_x - previous_mouse_x;
+        let dy = mouse_y - previous_mouse_y;
+        previous_mouse_x = mouse_x;
+        previous_mouse_y = mouse_y;
 
-            let left_clicked =
-                mouse.buttons.is_left_down() && !previous_mouse_button.is_left_down();
-            let right_clicked =
-                mouse.buttons.is_right_down() && !previous_mouse_button.is_right_down();
-            previous_mouse_button = mouse.buttons;
-
-            (dx, dy, left_clicked, right_clicked)
-        };
+        let left_clicked = mouse_buttons.is_left_down() && !previous_mouse_button.is_left_down();
+        let right_clicked = mouse_buttons.is_right_down() && !previous_mouse_button.is_right_down();
+        previous_mouse_button = mouse_buttons;
         camera.yaw += dx as f32 * MOUSE_SENSITIVITY;
         camera.pitch -= dy as f32 * MOUSE_SENSITIVITY;
         camera.pitch = camera.pitch.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
 
         // keyboard
-        let key_states = {
-            let keyboard = ps2::PS2_KEYBOARD.lock();
-            keyboard.key_states
-        };
+        let key_states = ps2::with_ps2_keyboard(|keyboard| keyboard.key_states);
         {
             // wasd moves on XZ plane
             let forward = camera.forward();
@@ -169,6 +155,16 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             }
             if key_states.is_pressed(KeyCode::LShift) {
                 camera.position -= Vec3::Y * SPEED;
+            }
+
+            // toggle log visibility
+            static mut PREV_TILDE_DOWN: bool = false;
+            unsafe {
+                let tilde_down = key_states.is_pressed(KeyCode::Oem8);
+                if tilde_down && !PREV_TILDE_DOWN {
+                    toggle_visible();
+                }
+                PREV_TILDE_DOWN = tilde_down;
             }
         }
 
@@ -197,15 +193,20 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             }
         }
 
-        // rerender
-        screen.render(&camera, &mesh);
-        if let Some((block_pos, _face)) = targeted_block {
-            screen.draw_block_outline(&camera, block_pos, Color::BLACK);
-        }
-        screen.draw_crosshair();
-
         kernel::rendering::with_global_renderer_mut(|renderer| {
-            screen.flush(renderer);
+            {
+                let mut frame = renderer.frame();
+                frame.clear_color(Color::LIGHT_GRAY);
+                frame.clear_depth();
+
+                screen.render(&mut frame, &camera, &mesh);
+                if let Some((block_pos, _face)) = targeted_block {
+                    screen.draw_block_outline(&mut frame, &camera, block_pos, Color::BLACK);
+                }
+                screen.draw_crosshair(&mut frame);
+                logger::LOGGER.render(&mut frame);
+            }
+            renderer.flush();
         });
     }
 }
@@ -213,5 +214,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     log::error!("{}", info);
+    // log auto flush will fail because interrupts are disabled,
+    // have to explicitly flush
+    log::logger().flush();
     kernel::hlt_loop();
 }
