@@ -9,7 +9,7 @@ use crate::ps2::keyboard::{KeyCode, KeyboardEvent};
 
 const PROMPT: &str = "> ";
 /// Placeholder text shown in console when input is empty and console is inactive.
-const PLACEHOLDER_TEXT: &str = "Enter to type command";
+const PLACEHOLDER_TEXT: &str = "Press [Enter] to type command";
 const MAX_INPUT_LEN: usize = 96;
 const FONT_SIZE: u32 = 14;
 
