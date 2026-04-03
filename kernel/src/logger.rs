@@ -21,6 +21,7 @@ pub struct TextBoxLogger {
     text_box: Mutex<Option<TextBox>>,
     backup_surface: Mutex<Option<BackupSurface>>,
     needs_flush: AtomicBool,
+    visible: AtomicBool,
 }
 
 #[derive(Clone, Copy)]
@@ -38,6 +39,7 @@ impl TextBoxLogger {
             text_box: Mutex::new(None),
             backup_surface: Mutex::new(None),
             needs_flush: AtomicBool::new(false),
+            visible: AtomicBool::new(true),
         }
     }
     pub fn enable_rendering(&self) {
@@ -65,6 +67,10 @@ impl log::Log for TextBoxLogger {
 
     fn log(&self, record: &log::Record) {
         serial_println!("{:5}: {}", record.level(), record.args());
+
+        if !self.visible.load(Ordering::Relaxed) {
+            return;
+        }
 
         let mut should_flush = self.needs_flush.load(Ordering::Relaxed);
         if let Some(mut guard) = self.text_box.try_lock() {
@@ -166,8 +172,16 @@ pub fn enable_rendering() {
     LOGGER.enable_rendering();
 }
 
+pub fn toggle_visible() {
+    LOGGER.visible.fetch_xor(true, Ordering::Relaxed);
+}
+
 impl TextBoxLogger {
     pub fn render(&self, frame: &mut Frame) {
+        if !self.visible.load(Ordering::Relaxed) {
+            return;
+        }
+
         let mut text_box_guard = self.text_box.lock();
         if let Some(text_box) = text_box_guard.as_mut() {
             render_text_box(text_box, frame);

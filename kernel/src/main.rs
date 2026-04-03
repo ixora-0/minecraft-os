@@ -8,7 +8,7 @@ use glam::Vec3;
 use kernel::{
     BOOTLOADER_CONFIG,
     allocator::{self},
-    logger::{self, init_logger},
+    logger::{self, init_logger, toggle_visible},
     memory::{self, BootInfoFrameAllocator},
     ps2::{self, mouse::MouseButtons},
     rendering::{self, init_global_renderer},
@@ -80,9 +80,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     use kernel_core::game;
     let mut camera = game::Camera::default();
     camera.set_position(-3.0, 5.0, -2.0);
-    // yaw=-50 deg
     camera.yaw = -50.0_f32.to_radians();
-    // yaw=--35 deg
     camera.pitch = -35.0_f32.to_radians();
 
     let screen = {
@@ -157,6 +155,16 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             }
             if key_states.is_pressed(KeyCode::LShift) {
                 camera.position -= Vec3::Y * SPEED;
+            }
+
+            // toggle log visibility
+            static mut PREV_TILDE_DOWN: bool = false;
+            unsafe {
+                let tilde_down = key_states.is_pressed(KeyCode::Oem8);
+                if tilde_down && !PREV_TILDE_DOWN {
+                    toggle_visible();
+                }
+                PREV_TILDE_DOWN = tilde_down;
             }
         }
 
