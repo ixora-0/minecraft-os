@@ -1,3 +1,4 @@
+use heapless::Deque;
 use spin::Mutex;
 use x86_64::instructions::interrupts;
 
@@ -12,6 +13,17 @@ where
     interrupts::without_interrupts(|| {
         let keyboard = PS2_KEYBOARD.lock();
         f(&keyboard)
+    })
+}
+
+/// Mutable keyboard access for cases that need to modify state (e.g., consuming events).
+pub fn with_ps2_keyboard_mut<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut Ps2Keyboard) -> R,
+{
+    interrupts::without_interrupts(|| {
+        let mut keyboard = PS2_KEYBOARD.lock();
+        f(&mut keyboard)
     })
 }
 
@@ -91,9 +103,21 @@ pub enum ScancodeSet {
     Unknown,
 }
 
+/// Keyboard event generated on key press, capturing key code and decoded character.
+/// Use [`pop_event`] to retrieve events for input handling (e.g., console commands).
+#[derive(Debug, Clone, Copy)]
+pub struct KeyboardEvent {
+    pub code: KeyCode,
+    pub state: KeyState,
+    pub character: Option<char>,
+}
+
+const KEYBOARD_EVENT_BUFFER: usize = 64;
+
 pub struct Ps2Keyboard {
     keyboard: pc_keyboard::Keyboard<pc_keyboard::layouts::Us104Key, pc_keyboard::ScancodeSet1>,
     pub key_states: KeyStates,
+    events: Deque<KeyboardEvent, KEYBOARD_EVENT_BUFFER>,
 }
 
 impl Ps2Keyboard {
@@ -101,15 +125,38 @@ impl Ps2Keyboard {
         if let Ok(Some(key_event)) = self.keyboard.add_byte(scancode) {
             let key_code = key_event.code as u8;
             let key_down = key_event.state == pc_keyboard::KeyState::Down;
-            let event_clone = key_event.clone();
-            self.keyboard.process_keyevent(key_event);
+            let decoded = self.keyboard.process_keyevent(key_event.clone());
             self.key_states.update_state(key_code, key_down);
-            log::trace!("{:?}", event_clone);
+            if key_down {
+                let character = decoded.and_then(|decoded_key| match decoded_key {
+                    pc_keyboard::DecodedKey::Unicode(ch) => Some(ch),
+                    _ => None,
+                });
+                self.push_event(KeyboardEvent {
+                    code: key_event.code,
+                    state: key_event.state,
+                    character,
+                });
+            }
+            log::trace!("{:?}", key_event);
         }
     }
 
     pub fn is_down(&self, key: KeyCode) -> bool {
         self.key_states.is_pressed(key)
+    }
+
+    /// Retrieves a keyboard event from the interrupt-driven event buffer.
+    /// Use this for character-based input (console) rather than checking KeyStates.
+    pub fn pop_event(&mut self) -> Option<KeyboardEvent> {
+        self.events.pop_front()
+    }
+
+    fn push_event(&mut self, event: KeyboardEvent) {
+        if self.events.is_full() {
+            let _ = self.events.pop_front();
+        }
+        self.events.push_back(event).ok();
     }
 }
 
@@ -122,6 +169,7 @@ impl const Default for Ps2Keyboard {
                 pc_keyboard::HandleControl::Ignore,
             ),
             key_states: KeyStates::default(),
+            events: Deque::new(),
         }
     }
 }

@@ -307,7 +307,20 @@ impl TextBox {
             line_descent: 0,
         };
         text_box.recalculate_metrics();
+        text_box.reset_content();
         text_box
+    }
+
+    fn reset_content(&mut self) {
+        self.buffer.clear();
+        self.buffer.push(LogicalLine::default());
+        self.visual_lines.clear();
+        self.visual_lines.push(VisualLine::default());
+        self.scroll_offset = 0;
+        self.cursor_x = self.config.padding_left;
+        self.parser = Parser::new(Style {
+            color_text: self.config.color_text,
+        });
     }
 
     fn recalculate_metrics(&mut self) {
@@ -348,8 +361,14 @@ impl TextBox {
     }
 
     pub fn clear(&mut self) {
-        self.buffer.clear();
-        self.scroll_offset = 0;
+        self.reset_content();
+    }
+
+    pub fn set_text(&mut self, text: &str) {
+        self.reset_content();
+        for byte in text.bytes() {
+            self.push_byte(byte);
+        }
     }
 
     pub fn push_byte(&mut self, b: u8) {
@@ -381,9 +400,8 @@ impl TextBox {
         let last_visual_line = self.visual_lines.last_mut().unwrap();
 
         self.cursor_x += advance;
-        // let line_end = self.bounding_box.size.width as i32 - self.config.padding_right;
-        // let line_end = self.bounding_box.size.width as i32;
-        let line_end = 700;
+        let line_end =
+            self.bounding_box.size.x as i32 - self.config.padding_right - self.config.padding_left;
         if self.cursor_x > line_end {
             // need new visual line
             // buffer shouldn't be empty

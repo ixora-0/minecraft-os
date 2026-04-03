@@ -6,7 +6,6 @@ use core::{
     slice,
     sync::atomic::{AtomicBool, Ordering},
 };
-use glam::{IVec2, USizeVec2};
 use kernel_core::rendering::{Color, Frame, Rectangle, Renderer, TextBox};
 use log::Level;
 use spin::Mutex;
@@ -20,6 +19,7 @@ pub struct TextBoxLogger {
     // which avoids static mut
     text_box: Mutex<Option<TextBox>>,
     backup_surface: Mutex<Option<BackupSurface>>,
+    bounds: Mutex<Option<Rectangle>>,
     needs_flush: AtomicBool,
     visible: AtomicBool,
 }
@@ -38,24 +38,26 @@ impl TextBoxLogger {
         TextBoxLogger {
             text_box: Mutex::new(None),
             backup_surface: Mutex::new(None),
+            bounds: Mutex::new(None),
             needs_flush: AtomicBool::new(false),
             visible: AtomicBool::new(true),
         }
     }
-    pub fn enable_rendering(&self) {
+    pub fn enable_rendering(&self, bounds: Rectangle) {
+        let stored_bounds = Rectangle {
+            top_left: bounds.top_left,
+            size: bounds.size,
+        };
         let (text_box, backup) = rendering::with_global_renderer_mut(|renderer| {
-            let (width, height) = (700, 350);
             let info = renderer.info();
             let ptr = renderer.framebuffer_ptr();
-            let text_box = TextBox::new(Rectangle {
-                top_left: IVec2::new(10, info.height as i32 - height as i32 - 10),
-                size: USizeVec2::new(width, height),
-            });
+            let text_box = TextBox::new(bounds);
             (text_box, BackupSurface { ptr, info })
         });
         let mut text_box_ref = self.text_box.lock();
         *text_box_ref = Some(text_box);
         *self.backup_surface.lock() = Some(backup);
+        *self.bounds.lock() = Some(stored_bounds);
         self.needs_flush.store(true, Ordering::Relaxed);
     }
 }
@@ -168,12 +170,20 @@ pub fn init_logger() {
         log::set_max_level(log::LevelFilter::Info);
     }
 }
-pub fn enable_rendering() {
-    LOGGER.enable_rendering();
+pub fn enable_rendering(bounds: Rectangle) {
+    LOGGER.enable_rendering(bounds);
 }
 
 pub fn toggle_visible() {
     LOGGER.visible.fetch_xor(true, Ordering::Relaxed);
+}
+
+pub fn is_visible() -> bool {
+    LOGGER.visible.load(Ordering::Relaxed)
+}
+
+pub fn set_visible(visible: bool) {
+    LOGGER.visible.store(visible, Ordering::Relaxed);
 }
 
 impl TextBoxLogger {

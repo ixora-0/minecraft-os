@@ -2,18 +2,24 @@
 #![no_main]
 
 extern crate alloc;
+use alloc::vec::Vec;
 use bootloader_api::BootInfo;
 use core::panic::PanicInfo;
-use glam::Vec3;
+use glam::{IVec2, USizeVec2, Vec3};
+use kernel::ps2::keyboard::KeyboardEvent;
 use kernel::{
     BOOTLOADER_CONFIG,
     allocator::{self},
-    logger::{self, init_logger, toggle_visible},
+    console::Console,
+    logger::{self, init_logger},
     memory::{self, BootInfoFrameAllocator},
     ps2::{self},
     rendering::{self, init_global_renderer},
 };
-use kernel_core::{game::world, rendering::Color};
+use kernel_core::{
+    game::world,
+    rendering::{Color, Rectangle},
+};
 use pc_keyboard::KeyCode;
 use x86_64::VirtAddr;
 
@@ -59,7 +65,38 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         renderer.flush();
         renderer.info()
     });
-    logger::enable_rendering();
+    // calculate bounds for log and console panels.
+    // console is positioned below log, both bottom-left of screen.
+    let (logger_bounds, console_bounds) = {
+        const LOG_WIDTH: usize = 800;
+        const LOG_HEIGHT: usize = 450;
+        const LEFT_MARGIN: usize = 12;
+        const BOT_MARGIN: usize = 12;
+        const CONSOLE_HEIGHT: usize = 48;
+        const CONSOLE_GAP: usize = 6;
+
+        let available_width = global_renderer_info.width.saturating_sub(LEFT_MARGIN);
+        let available_height = global_renderer_info.height.saturating_sub(BOT_MARGIN);
+        let log_width = LOG_WIDTH.min(available_width);
+        let log_height = LOG_HEIGHT.min(available_height);
+        let log_top =
+            (global_renderer_info.height - CONSOLE_HEIGHT - BOT_MARGIN - CONSOLE_GAP - log_height)
+                .max(0) as i32;
+        let log_left = LEFT_MARGIN as i32;
+        let console_top = log_top + log_height as i32 + CONSOLE_GAP as i32;
+        (
+            Rectangle {
+                top_left: IVec2::new(log_left, log_top),
+                size: USizeVec2::new(log_width, log_height),
+            },
+            Rectangle {
+                top_left: IVec2::new(log_left, console_top),
+                size: USizeVec2::new(log_width, CONSOLE_HEIGHT),
+            },
+        )
+    };
+
+    logger::enable_rendering(logger_bounds);
     log::info!("{:?}", global_renderer_info);
 
     const ASCII: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\nabcdefghijklmnopqrstuvwxyz\n0123456789\n!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
@@ -95,6 +132,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         game::world::get_world_mesh(&world)
     };
 
+    let mut console = Console::new(console_bounds);
+    let mut keyboard_events: Vec<KeyboardEvent> = Vec::with_capacity(64);
+
     {
         let allocated = kernel::allocator::ALLOCATOR.get_allocated_bytes();
         let available = allocator::HEAP_SIZE;
@@ -105,8 +145,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             (allocated as f32 / available as f32 * 100.0) as u32
         );
     }
-    log::trace!("Entering loop");
 
+    // --- MAIN LOOP ---
+    log::trace!("Entering loop");
     const MOUSE_SENSITIVITY: f32 = 0.0015;
     const SPEED: f32 = 0.15;
     const PI: f32 = core::f32::consts::PI;
@@ -119,9 +160,41 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         camera.pitch -= dy as f32 * MOUSE_SENSITIVITY;
         camera.pitch = camera.pitch.clamp(-PI / 2.0 + 0.01, PI / 2.0 - 0.01);
 
-        // keyboard
+        keyboard_events.clear();
+        ps2::with_ps2_keyboard_mut(|keyboard| {
+            while let Some(event) = keyboard.pop_event() {
+                keyboard_events.push(event);
+            }
+        });
+
+        for event in keyboard_events.iter().copied() {
+            if !console.is_active() && matches!(event.code, KeyCode::T | KeyCode::Return) {
+                console.set_active(true);
+                continue;
+            }
+
+            if event.code == KeyCode::Oem8 {
+                if console.is_visible() && logger::is_visible() {
+                    console.set_visible(false);
+                    logger::set_visible(false);
+                } else {
+                    console.set_visible(true);
+                    logger::set_visible(true);
+                }
+                continue;
+            }
+
+            if let Some(command) = console.process_event(event) {
+                let trimmed = command.trim();
+                if !trimmed.is_empty() {
+                    log::info!("[console] {}", trimmed);
+                }
+            }
+        }
+
+        // keyboard state for movement
         let key_states = ps2::with_ps2_keyboard(|keyboard| keyboard.key_states);
-        {
+        if !console.is_active() {
             // wasd moves on XZ plane
             let forward = camera.forward();
             let forward = Vec3::new(forward.x, 0.0, forward.z).normalize(); //  project onto XZ
@@ -145,16 +218,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             }
             if key_states.is_pressed(KeyCode::LShift) {
                 camera.position -= Vec3::Y * SPEED;
-            }
-
-            // toggle log visibility
-            static mut PREV_TILDE_DOWN: bool = false;
-            unsafe {
-                let tilde_down = key_states.is_pressed(KeyCode::Oem8);
-                if tilde_down && !PREV_TILDE_DOWN {
-                    toggle_visible();
-                }
-                PREV_TILDE_DOWN = tilde_down;
             }
         }
 
@@ -195,6 +258,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                 }
                 screen.draw_crosshair(&mut frame);
                 logger::LOGGER.render(&mut frame);
+                console.render(&mut frame);
             }
             renderer.flush();
         });
@@ -203,6 +267,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
+    logger::set_visible(true);
     log::error!("{}", info);
     // log auto flush will fail because interrupts are disabled,
     // have to explicitly flush

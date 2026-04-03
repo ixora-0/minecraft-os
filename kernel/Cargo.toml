@@ -29,3 +29,4 @@ pc-keyboard.workspace = true
 linked_list_allocator.workspace = true
 acpi.workspace = true
 glam.workspace = true
+heapless.workspace = true

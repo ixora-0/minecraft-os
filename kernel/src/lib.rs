@@ -7,6 +7,7 @@ extern crate alloc;
 
 pub mod acpi;
 pub mod allocator;
+pub mod console;
 pub mod gdt;
 pub mod interrupts;
 pub mod logger;
