@@ -107,6 +107,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     kernel::acpi::init(rsdp_addr);
 
     kernel::ps2::init();
+    kernel::timer::init();
 
     x86_64::instructions::interrupts::enable();
     // kernel::acpi::shutdown();
