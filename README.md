@@ -1,5 +1,8 @@
 # minecraft-os
 
+[![CI](https://github.com/ixora-0/minecraft-os/actions/workflows/ci.yml/badge.svg)](https://github.com/ixora-0/minecraft-os/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/ixora-0/minecraft-os?include_prereleases&sort=semver)](https://github.com/ixora-0/minecraft-os/releases/latest)
+
 An x86_64 operating system written in Rust, inspired by Minecraft. It boots
 on bare metal (or in a virtual machine) via UEFI or legacy BIOS, and currently
 includes a framebuffer graphics stack, a text console, keyboard input, and more.
