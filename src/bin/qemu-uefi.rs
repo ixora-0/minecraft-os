@@ -9,6 +9,9 @@ fn main() {
     let prebuilt = Prebuilt::fetch(Source::LATEST, "target/ovmf").unwrap();
     let ovmf_code = prebuilt.get_file(Arch::X64, FileType::Code);
     let ovmf_vars = prebuilt.get_file(Arch::X64, FileType::Vars);
+    let image = env::args()
+        .nth(1)
+        .unwrap_or_else(|| env!("UEFI_IMAGE").to_string());
     let mut qemu = Command::new("qemu-system-x86_64");
     qemu.args([
         "-drive",
@@ -19,7 +22,7 @@ fn main() {
         "-drive",
         &format!("format=raw,if=pflash,file={}", ovmf_vars.display()),
         "-drive",
-        &format!("format=raw,file={}", env!("UEFI_IMAGE")),
+        &format!("format=raw,file={}", image),
         "-serial",
         "stdio",
     ]);
