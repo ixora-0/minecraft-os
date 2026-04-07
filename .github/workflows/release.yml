@@ -31,6 +31,13 @@ jobs:
       - name: Move images
         run: cargo run --release -p minecraft-os --bin move-images
 
+      - name: Fetch OVMF firmware
+        id: ovmf
+        run: |
+          mapfile -t OVMF_PATHS < <(cargo run --release -q -p minecraft-os --bin fetch-ovmf)
+          echo "code=${OVMF_PATHS[0]}" >> "$GITHUB_OUTPUT"
+          echo "vars=${OVMF_PATHS[1]}" >> "$GITHUB_OUTPUT"
+
       - name: Stage artifacts
         id: stage
         run: |
@@ -43,16 +50,25 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           cp target/release/uefi.img "dist/minecraft-os-${VERSION}-uefi.img"
           cp target/release/bios.img "dist/minecraft-os-${VERSION}-bios.img"
+          cp "${{ steps.ovmf.outputs.code }}" dist/OVMF_CODE.fd
+          cp "${{ steps.ovmf.outputs.vars }}" dist/OVMF_VARS.fd
+          cp scripts/run-uefi.sh dist/run-uefi.sh
+          chmod +x dist/run-uefi.sh
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: minecraft-os-images-${{ steps.stage.outputs.version }}
-          path: dist/*.img
+          name: minecraft-os-${{ steps.stage.outputs.version }}
+          path: dist/*
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.img
+          files: |
+            dist/minecraft-os-*-uefi.img
+            dist/minecraft-os-*-bios.img
+            dist/OVMF_CODE.fd
+            dist/OVMF_VARS.fd
+            dist/run-uefi.sh
           generate_release_notes: true
