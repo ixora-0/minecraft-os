@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
@@ -45,7 +45,7 @@ jobs:
           cp target/release/bios.img "dist/minecraft-os-${VERSION}-bios.img"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: minecraft-os-images-${{ steps.stage.outputs.version }}
           path: dist/*.img
