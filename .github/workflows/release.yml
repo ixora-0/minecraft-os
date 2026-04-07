@@ -1,0 +1,58 @@
+name: Build & Release Images
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src, llvm-tools-preview
+          targets: x86_64-unknown-none
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release -p minecraft-os
+
+      - name: Move images
+        run: cargo run --release -p minecraft-os --bin move-images
+
+      - name: Stage artifacts
+        id: stage
+        run: |
+          mkdir -p dist
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="${GITHUB_SHA::7}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          cp target/x86_64-unknown-none/release/uefi.img "dist/minecraft-os-${VERSION}-uefi.img"
+          cp target/x86_64-unknown-none/release/bios.img "dist/minecraft-os-${VERSION}-bios.img"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: minecraft-os-images-${{ steps.stage.outputs.version }}
+          path: dist/*.img
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.img
+          generate_release_notes: true
