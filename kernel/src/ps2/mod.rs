@@ -351,12 +351,16 @@ fn init_keyboard(ps2: &mut Ps2Controller) {
         ps2.log_ack("get scancode set command");
         ps2.write_data(0x00);
         ps2.log_ack("get scancode set");
-        let scancode_set_id = ps2.read_data();
+        let scancode_set_id = ps2.read_with_timeout();
         match scancode_set_id {
-            0x43 | 0x01 => ScancodeSet::Set1,
-            0x41 | 0x02 => ScancodeSet::Set2,
-            0x3F | 0x03 => ScancodeSet::Set3,
-            id => {
+            None => {
+                log::warn!("PS/2 keyboard: No scancode set received");
+                ScancodeSet::Unknown
+            }
+            Some(0x43) | Some(0x01) => ScancodeSet::Set1,
+            Some(0x41) | Some(0x02) => ScancodeSet::Set2,
+            Some(0x3F) | Some(0x03) => ScancodeSet::Set3,
+            Some(id) => {
                 log::warn!("PS/2 keyboard: Unknown scancode set: {:#X}", id);
                 ScancodeSet::Unknown
             }
