@@ -9,6 +9,10 @@ use x86_64::{PhysAddr, VirtAddr};
 /// Can be get from boot_info, which is passed to _start by the bootloader.
 pub static PHYS_MEM_OFFSET: Once<VirtAddr> = Once::new();
 
+pub fn translate_addr(physical_address: usize) -> VirtAddr {
+    *PHYS_MEM_OFFSET.get().expect("Physical memory offset is not yet initialized. Should get this from boot_info passed into _start by the bootloader.") + physical_address as u64
+}
+
 /// Initialize a new OffsetPageTable.
 ///
 /// This function is unsafe because the caller must guarantee that the

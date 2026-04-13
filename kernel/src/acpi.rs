@@ -7,18 +7,15 @@ use acpi::{Handle, Handler, PciAddress, PhysicalMapping, sdt::fadt::Fadt};
 use alloc::vec;
 use core::ptr::NonNull;
 use spin::{Mutex, Once};
-use x86_64::{VirtAddr, instructions::port::Port};
+use x86_64::instructions::port::Port;
 
-use crate::memory::PHYS_MEM_OFFSET;
+use crate::memory::translate_addr;
 
 pub static ACPI_TABLES: Once<acpi::AcpiTables<KernelACPI>> = Once::new();
 pub static FADT_MAPPING: Once<Mutex<PhysicalMapping<KernelACPI, Fadt>>> = Once::new();
 pub static AML_INTERPRETER: Once<Interpreter<KernelACPI>> = Once::new();
 const PM1_SLP_EN: u16 = 1 << 13;
 
-fn translate_addr(physical_address: usize) -> VirtAddr {
-    *PHYS_MEM_OFFSET.get().expect("Physical memory offset is not yet initialized. Should get this from boot_info passed into _start by the bootloader.") + physical_address as u64
-}
 #[derive(Copy, Clone)]
 pub struct KernelACPI;
 impl Handler for KernelACPI {
