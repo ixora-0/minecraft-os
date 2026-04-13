@@ -79,9 +79,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         let log_width = LOG_WIDTH.min(available_width);
         let log_height = LOG_HEIGHT.min(available_height);
         let console_height = Console::recommended_height();
-        let log_top =
-            (global_renderer_info.height - console_height - BOT_MARGIN - CONSOLE_GAP - log_height)
-                .max(0) as i32;
+        let log_top = global_renderer_info
+            .height
+            .saturating_sub(console_height + BOT_MARGIN + CONSOLE_GAP + log_height)
+            as i32;
         let log_left = LEFT_MARGIN as i32;
         let console_top = log_top + log_height as i32 + CONSOLE_GAP as i32;
         logger::enable_rendering(Rectangle {
