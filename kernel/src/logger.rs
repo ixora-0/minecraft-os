@@ -181,6 +181,15 @@ pub fn set_visible(visible: bool) {
     LOGGER.visible.store(visible, Ordering::Relaxed);
 }
 
+pub fn scroll(delta: isize) {
+    if let Some(mut guard) = LOGGER.text_box.try_lock() {
+        if let Some(text_box) = guard.as_mut() {
+            text_box.scroll(delta);
+            LOGGER.needs_flush.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
 impl TextBoxLogger {
     pub fn render(&self, frame: &mut Frame) {
         if !self.visible.load(Ordering::Relaxed) {

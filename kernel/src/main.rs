@@ -166,6 +166,20 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         });
 
         for event in keyboard_events.iter().copied() {
+            if !console.is_active() && event.state == pc_keyboard::KeyState::Down {
+                match event.code {
+                    KeyCode::ArrowUp => {
+                        logger::scroll(1);
+                        continue;
+                    }
+                    KeyCode::ArrowDown => {
+                        logger::scroll(-1);
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+
             if !console.is_active() && matches!(event.code, KeyCode::T | KeyCode::Return) {
                 console.set_active(true);
                 continue;
