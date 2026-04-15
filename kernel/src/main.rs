@@ -106,6 +106,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         None => panic!("No RSDP was found (BIOS) or reported (UEFI)"),
     };
     kernel::acpi::init(rsdp_addr);
+    kernel::pci::init();
 
     kernel::ps2::init();
     kernel::timer::init();
