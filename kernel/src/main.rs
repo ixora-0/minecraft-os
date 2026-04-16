@@ -41,6 +41,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&boot_info.memory_regions) };
     log::trace!("Initializing heap");
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("heap initialization failed");
+    memory::store_frame_allocator(frame_allocator);
 
     // --- RENDERER ---
     log::trace!("Initializing renderer");
@@ -107,6 +108,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     };
     kernel::acpi::init(rsdp_addr);
     kernel::pci::init();
+    kernel::ahci::init();
+    kernel::nvme::init();
 
     kernel::ps2::init();
     kernel::timer::init();

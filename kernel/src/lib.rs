@@ -6,12 +6,14 @@
 extern crate alloc;
 
 pub mod acpi;
+pub mod ahci;
 pub mod allocator;
 pub mod console;
 pub mod gdt;
 pub mod interrupts;
 pub mod logger;
 pub mod memory;
+pub mod nvme;
 pub mod pci;
 pub mod ps2;
 pub mod rendering;
