@@ -146,7 +146,7 @@ fn init_inner() -> Option<AhciController> {
     let ahci_dev = match pci::find_by_class(class_code, subclass_code).next() {
         Some(dev) => dev,
         None => {
-            log::warn!("AHCI: No AHCI controller found on PCI bus");
+            log::debug!("AHCI: No AHCI controller found on PCI bus");
             return None;
         }
     };

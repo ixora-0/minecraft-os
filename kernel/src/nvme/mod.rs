@@ -149,7 +149,7 @@ fn init_inner() -> Option<NvmeController> {
     let nvme_dev = match pci::find_by_class(class_code, subclass_code).next() {
         Some(dev) => dev,
         None => {
-            log::warn!("NVMe: no controller found on PCI bus");
+            log::debug!("NVMe: no controller found on PCI bus");
             return None;
         }
     };
