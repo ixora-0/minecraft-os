@@ -1,11 +1,11 @@
 default:
     @just --list
 
-run:
-    cargo run -p minecraft-os
+run *ARGS:
+    cargo run -p minecraft-os -- {{ARGS}}
 
-run-bios:
-    cargo run -p minecraft-os --bin qemu-bios
+run-bios *ARGS:
+    cargo run -p minecraft-os --bin qemu-bios -- {{ARGS}}
 
 alias t := test
 test:

@@ -35,8 +35,12 @@ Put them all in the same folder, then:
 
 ```sh
 chmod +x run-uefi.sh
-./run-uefi.sh minecraft-os-<version>-uefi.img
+./run-uefi.sh minecraft-os-<version>-uefi.img [--nvme] [--ahci]
 ```
+
+The script accepts these optional flags for persistent storage (needed for saving/loading worlds):
+- `--nvme` — attach an NVMe disk (creates `NVME.img`)
+- `--ahci` — attach an AHCI disk (creates `AHCI.img`)
 
 ### BIOS
 
