@@ -17,7 +17,7 @@ use kernel::{
     rendering::{self, init_global_renderer},
 };
 use kernel_core::{
-    game::world,
+    game::{save, world},
     rendering::{Color, Rectangle},
 };
 use pc_keyboard::KeyCode;
@@ -110,12 +110,15 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     kernel::pci::init();
     kernel::ahci::init();
     kernel::nvme::init();
+    kernel::storage::init();
 
     kernel::ps2::init();
     kernel::timer::init();
 
     x86_64::instructions::interrupts::enable();
     // kernel::acpi::shutdown();
+
+    let mut save_lba: Option<u64> = None;
 
     use kernel_core::game;
     let mut camera = game::Camera::default();
@@ -150,6 +153,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     // --- MAIN LOOP ---
     log::trace!("Entering loop");
+    const LBA_NOT_SET_MSG: &str = "No save LBA set. Use 'set-lba <lba>' first.\n\
+        On QEMU, use 'set-lba 0'. On real hardware, find a safe\n\
+        LBA (e.g. empty/swap partition). See README for a guide.";
     const MOUSE_SENSITIVITY: f32 = 0.0015;
     const SPEED: f32 = 0.15;
     const PI: f32 = core::f32::consts::PI;
@@ -202,8 +208,52 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
             if let Some(command) = console.process_event(event) {
                 let trimmed = command.trim();
-                if !trimmed.is_empty() {
-                    log::info!("[console] {}", trimmed);
+                if trimmed.is_empty() {
+                    continue;
+                }
+                log::info!("[console] {}", trimmed);
+                if let Some(lba_str) = trimmed.strip_prefix("set-lba ") {
+                    match lba_str.trim().parse::<u64>() {
+                        Ok(lba) => {
+                            save_lba = Some(lba);
+                            log::info!("Save LBA set to {}", lba);
+                        }
+                        Err(_) => log::warn!("Usage: set-lba <number>"),
+                    }
+                } else if trimmed == "save" {
+                    if let Some(lba) = save_lba {
+                        let world = game::world::WORLD.lock();
+                        let buf = save::serialize(&world, &camera);
+                        match kernel::storage::write_sectors(lba, 2, &buf) {
+                            Ok(()) => log::info!("World saved to LBA {}", lba),
+                            Err(e) => log::error!("Save failed: {:?}", e),
+                        }
+                    } else {
+                        log::warn!("{}", LBA_NOT_SET_MSG);
+                    }
+                } else if trimmed == "load" {
+                    if let Some(lba) = save_lba {
+                        let mut buf = [0u8; 1024];
+                        match kernel::storage::read_sectors(lba, 2, &mut buf) {
+                            Ok(()) => match save::deserialize(&buf) {
+                                Ok((loaded_world, loaded_camera)) => {
+                                    *game::world::WORLD.lock() = loaded_world;
+                                    camera = loaded_camera;
+                                    mesh = game::world::get_world_mesh(&game::world::WORLD.lock());
+                                    log::info!("World loaded from LBA {}", lba);
+                                }
+                                Err(e) => log::error!("Deserialize failed: {:?}", e),
+                            },
+                            Err(e) => log::error!("Load failed: {:?}", e),
+                        }
+                    } else {
+                        log::warn!("{}", LBA_NOT_SET_MSG);
+                    }
+                } else {
+                    match trimmed {
+                        "shutdown" => kernel::acpi::shutdown(),
+                        _ => {}
+                    }
                 }
             }
         }
