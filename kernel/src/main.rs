@@ -176,6 +176,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         });
 
         for event in keyboard_events.iter().copied() {
+            // console scroll
             if !console.is_active() && event.state == pc_keyboard::KeyState::Down {
                 match event.code {
                     KeyCode::ArrowUp => {
@@ -190,11 +191,13 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                 }
             }
 
+            // console active
             if !console.is_active() && matches!(event.code, KeyCode::T | KeyCode::Return) {
                 console.set_active(true);
                 continue;
             }
 
+            // toggle logs visibility
             if event.code == KeyCode::Oem8 {
                 if console.is_visible() && logger::is_visible() {
                     console.set_visible(false);
@@ -206,6 +209,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                 continue;
             }
 
+            // parse commands
             if let Some(command) = console.process_event(event) {
                 let trimmed = command.trim();
                 if trimmed.is_empty() {
