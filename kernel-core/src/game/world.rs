@@ -4,9 +4,9 @@ use glam::{USizeVec3, Vec3};
 use spin::{Lazy, Mutex};
 
 // World dimensions in blocks (x, y, z)
-const WORLD_X: usize = 8;
-const WORLD_Y: usize = 8;
-const WORLD_Z: usize = 8;
+pub const WORLD_X: usize = 8;
+pub const WORLD_Y: usize = 8;
+pub const WORLD_Z: usize = 8;
 
 pub type World = [[[bool; WORLD_Z]; WORLD_Y]; WORLD_X];
 pub const fn empty_world() -> World {
