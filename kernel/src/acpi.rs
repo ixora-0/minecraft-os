@@ -7,18 +7,15 @@ use acpi::{Handle, Handler, PciAddress, PhysicalMapping, sdt::fadt::Fadt};
 use alloc::vec;
 use core::ptr::NonNull;
 use spin::{Mutex, Once};
-use x86_64::{VirtAddr, instructions::port::Port};
+use x86_64::instructions::port::Port;
 
-use crate::memory::PHYS_MEM_OFFSET;
+use crate::memory::translate_addr;
 
 pub static ACPI_TABLES: Once<acpi::AcpiTables<KernelACPI>> = Once::new();
 pub static FADT_MAPPING: Once<Mutex<PhysicalMapping<KernelACPI, Fadt>>> = Once::new();
 pub static AML_INTERPRETER: Once<Interpreter<KernelACPI>> = Once::new();
 const PM1_SLP_EN: u16 = 1 << 13;
 
-fn translate_addr(physical_address: usize) -> VirtAddr {
-    *PHYS_MEM_OFFSET.get().expect("Physical memory offset is not yet initialized. Should get this from boot_info passed into _start by the bootloader.") + physical_address as u64
-}
 #[derive(Copy, Clone)]
 pub struct KernelACPI;
 impl Handler for KernelACPI {
@@ -86,26 +83,54 @@ impl Handler for KernelACPI {
         unsafe { Port::<u32>::new(port).write(value) }
     }
 
-    // --- PCI (stubbed) ---
-    fn read_pci_u8(&self, _: PciAddress, _: u16) -> u8 {
-        0
+    // --- PCI ---
+    fn read_pci_u8(&self, addr: PciAddress, offset: u16) -> u8 {
+        crate::pci::pci_read_u8(addr.bus(), addr.device(), addr.function(), offset as u8)
     }
-    fn read_pci_u16(&self, _: PciAddress, _: u16) -> u16 {
-        0
+    fn read_pci_u16(&self, addr: PciAddress, offset: u16) -> u16 {
+        crate::pci::pci_read_u16(addr.bus(), addr.device(), addr.function(), offset as u8)
     }
-    fn read_pci_u32(&self, _: PciAddress, _: u16) -> u32 {
-        0
+    fn read_pci_u32(&self, addr: PciAddress, offset: u16) -> u32 {
+        crate::pci::pci_read_u32(addr.bus(), addr.device(), addr.function(), offset as u8)
     }
-    fn write_pci_u8(&self, _: PciAddress, _: u16, _: u8) {}
-    fn write_pci_u16(&self, _: PciAddress, _: u16, _: u16) {}
-    fn write_pci_u32(&self, _: PciAddress, _: u16, _: u32) {}
+    fn write_pci_u8(&self, addr: PciAddress, offset: u16, value: u8) {
+        crate::pci::pci_write_u8(
+            addr.bus(),
+            addr.device(),
+            addr.function(),
+            offset as u8,
+            value,
+        )
+    }
+    fn write_pci_u16(&self, addr: PciAddress, offset: u16, value: u16) {
+        crate::pci::pci_write_u16(
+            addr.bus(),
+            addr.device(),
+            addr.function(),
+            offset as u8,
+            value,
+        )
+    }
+    fn write_pci_u32(&self, addr: PciAddress, offset: u16, value: u32) {
+        crate::pci::pci_write_u32(
+            addr.bus(),
+            addr.device(),
+            addr.function(),
+            offset as u8,
+            value,
+        )
+    }
 
-    // --- Timing (stubbed for now) ---
+    // --- Timing ---
     fn nanos_since_boot(&self) -> u64 {
-        0
+        crate::timer::nanos_since_boot()
     }
-    fn stall(&self, _microseconds: u64) {}
-    fn sleep(&self, _milliseconds: u64) {}
+    fn stall(&self, microseconds: u64) {
+        crate::timer::sleep(microseconds)
+    }
+    fn sleep(&self, milliseconds: u64) {
+        crate::timer::sleep(milliseconds * 1000)
+    }
 
     fn create_mutex(&self) -> Handle {
         Handle(0)

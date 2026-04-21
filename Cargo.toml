@@ -34,6 +34,7 @@ volatile = "0.6.1"
 glam = { version = "0.32.1", default-features = false, features = ["libm"] }
 approx = { version = "0.5.1", default-features = false }
 heapless = "0.9.2"
+clap = { version = "4.6.1", features = ["derive"] }
 
 [build-dependencies]
 kernel = { path = "kernel", artifact = "bin", target = "x86_64-unknown-none" }
@@ -45,3 +46,4 @@ bootloader.workspace = true
 bootloader-boot-config.workspace = true
 wait-timeout.workspace = true
 tests-qemu-exit-code = { path = "tests-qemu-exit-code" }
+clap.workspace = true

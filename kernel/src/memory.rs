@@ -1,5 +1,5 @@
 use bootloader_api::info::{MemoryRegionKind, MemoryRegions};
-use spin::Once;
+use spin::{Mutex, Once};
 use x86_64::structures::paging::{FrameAllocator, PhysFrame, Size4KiB};
 use x86_64::structures::paging::{OffsetPageTable, PageTable};
 use x86_64::{PhysAddr, VirtAddr};
@@ -8,6 +8,27 @@ use x86_64::{PhysAddr, VirtAddr};
 /// Should be initialized early when the OS starts.
 /// Can be get from boot_info, which is passed to _start by the bootloader.
 pub static PHYS_MEM_OFFSET: Once<VirtAddr> = Once::new();
+pub const EXPECT_MSG_PHYS_MEM_OFFSET_NOT_INITIALIZED: &str = "Physical memory offset is not yet initialized. Should get this from boot_info passed into _start by the bootloader.";
+
+pub fn translate_addr(physical_address: usize) -> VirtAddr {
+    *PHYS_MEM_OFFSET
+        .get()
+        .expect(EXPECT_MSG_PHYS_MEM_OFFSET_NOT_INITIALIZED)
+        + physical_address as u64
+}
+
+/// Convert a virtual address (in the direct-mapped physical memory region)
+/// back to a physical address.
+pub fn virt_to_phys(virt: VirtAddr) -> PhysAddr {
+    let offset = PHYS_MEM_OFFSET
+        .get()
+        .expect("Physical memory offset not initialized");
+    debug_assert!(
+        virt.as_u64() >= offset.as_u64(),
+        "Virtual address is not in the direct-mapped physical memory region"
+    );
+    PhysAddr::new(virt.as_u64() - offset.as_u64())
+}
 
 /// Initialize a new OffsetPageTable.
 ///
@@ -39,6 +60,36 @@ unsafe fn active_level_4_table(phys_mem_offset: VirtAddr) -> &'static mut PageTa
     let page_table_ptr: *mut PageTable = virt.as_mut_ptr();
 
     unsafe { &mut *page_table_ptr }
+}
+
+static FRAME_ALLOCATOR: Once<Mutex<BootInfoFrameAllocator>> = Once::new();
+
+/// Store the frame allocator globally so drivers can allocate physical frames for DMA.
+/// Call after `init_heap` so the allocator's internal counter has advanced past heap frames.
+pub fn store_frame_allocator(alloc: BootInfoFrameAllocator) {
+    FRAME_ALLOCATOR.call_once(|| Mutex::new(alloc));
+}
+
+/// Allocate a single 4 KiB physical frame and return its virtual address
+/// (in the direct-mapped region) and physical address.
+/// The frame is zeroed.
+pub fn alloc_phys_frame() -> (VirtAddr, PhysAddr) {
+    let mut alloc = FRAME_ALLOCATOR
+        .get()
+        .expect("frame allocator not stored")
+        .lock();
+    let frame = alloc
+        .allocate_frame()
+        .expect("out of physical memory frames");
+    let phys = frame.start_address();
+    let virt = translate_addr(phys.as_u64() as usize);
+
+    // zero the frame
+    unsafe {
+        core::ptr::write_bytes(virt.as_mut_ptr::<u8>(), 0, 4096);
+    }
+
+    (virt, phys)
 }
 
 /// A FrameAllocator that returns usable frames from the bootloader's memory map.
