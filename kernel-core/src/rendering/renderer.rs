@@ -538,19 +538,15 @@ impl<'f> Renderer3d<'f> {
             let depth_row_offset = &mut self.depth_buffer[y * w..(y + 1) * w];
             let buffer_row_offset = y * self.info.stride * bpp;
 
-            for (x, depth) in depth_row_offset
-                .iter_mut()
-                .enumerate()
-                .skip(xi_left)
-                .take(xi_right - xi_left + 1)
-            {
+            let mut off = buffer_row_offset + xi_left * bpp;
+            for depth in &mut depth_row_offset[xi_left..=xi_right] {
                 // depth buffer uses reverse z (far to near)
                 if z > *depth {
                     *depth = z;
-                    let off = buffer_row_offset + x * bpp;
                     self.buffer[off..off + bpp].copy_from_slice(color_bytes);
                 }
                 z += dz_dx;
+                off += bpp;
             }
         }
     }
