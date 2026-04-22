@@ -1,3 +1,4 @@
+mod geometry;
 pub mod text_box;
 pub use text_box::{TextBox, TextBoxConfig};
 pub mod renderer;
