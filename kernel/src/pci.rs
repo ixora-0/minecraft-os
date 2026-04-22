@@ -144,8 +144,8 @@ fn read_device(bus: u8, device: u8, function: u8) -> Option<PciDevice> {
     // https://wiki.osdev.org/PCI#Header_Type_0x0
     // https://wiki.osdev.org/PCI#Header_Type_0x1_(PCI-to-PCI_bridge)
     let bar_count = if header_type & 0x7F == 0 { 6 } else { 2 };
-    for i in 0..bar_count {
-        bars[i] = pci_read_u32(bus, device, function, 0x10 + (i as u8) * 4);
+    for (i, bar) in bars[..bar_count].iter_mut().enumerate() {
+        *bar = pci_read_u32(bus, device, function, 0x10 + (i as u8) * 4);
     }
     Some(PciDevice {
         bus,

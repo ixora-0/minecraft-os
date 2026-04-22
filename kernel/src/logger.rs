@@ -70,27 +70,27 @@ impl log::Log for TextBoxLogger {
     fn log(&self, record: &log::Record) {
         serial_println!("{:5}: {}", record.level(), record.args());
 
-        if let Some(mut guard) = self.text_box.try_lock() {
-            if let Some(text_box) = guard.as_mut() {
-                let prev_color = text_box.get_current_text_color();
-                let color = match record.level() {
-                    Level::Error => Color::RED,
-                    Level::Warn => Color::YELLOW,
-                    Level::Info => Color::WHITE,
-                    Level::Debug => Color::LIGHT_GRAY,
-                    Level::Trace => Color::DARK_GRAY,
-                };
-                writeln!(
-                    text_box,
-                    "{}{:5}: {}{}",
-                    color.fg(),
-                    record.level(),
-                    record.args(),
-                    prev_color.fg()
-                )
-                .unwrap();
-                self.needs_flush.store(true, Ordering::Relaxed);
-            }
+        if let Some(mut guard) = self.text_box.try_lock()
+            && let Some(text_box) = guard.as_mut()
+        {
+            let prev_color = text_box.get_current_text_color();
+            let color = match record.level() {
+                Level::Error => Color::RED,
+                Level::Warn => Color::YELLOW,
+                Level::Info => Color::WHITE,
+                Level::Debug => Color::LIGHT_GRAY,
+                Level::Trace => Color::DARK_GRAY,
+            };
+            writeln!(
+                text_box,
+                "{}{:5}: {}{}",
+                color.fg(),
+                record.level(),
+                record.args(),
+                prev_color.fg()
+            )
+            .unwrap();
+            self.needs_flush.store(true, Ordering::Relaxed);
         }
 
         // writeln! only push the bytes to the text box
@@ -181,13 +181,13 @@ pub fn set_visible(visible: bool) {
     LOGGER.visible.store(visible, Ordering::Relaxed);
 }
 
-pub fn scroll(delta: isize) {
-    if let Some(mut guard) = LOGGER.text_box.try_lock() {
-        if let Some(text_box) = guard.as_mut() {
-            text_box.scroll(delta);
-            LOGGER.needs_flush.store(true, Ordering::Relaxed);
-        }
-    }
+/// Returns None when the text box is not available.
+pub fn scroll(delta: isize) -> Option<()> {
+    let mut guard = LOGGER.text_box.try_lock()?;
+    let text_box = guard.as_mut()?;
+    text_box.scroll(delta);
+    LOGGER.needs_flush.store(true, Ordering::Relaxed);
+    Some(())
 }
 
 impl TextBoxLogger {

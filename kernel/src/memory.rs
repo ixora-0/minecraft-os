@@ -32,10 +32,10 @@ pub fn virt_to_phys(virt: VirtAddr) -> PhysAddr {
 
 /// Initialize a new OffsetPageTable.
 ///
-/// This function is unsafe because the caller must guarantee that the
-/// complete physical memory is mapped to virtual memory at the passed
-/// `physical_memory_offset`. Also, this function must be only called once
-/// to avoid aliasing `&mut` references (which is undefined behavior).
+/// # Safety
+/// Complete physical memory is mapped to virtual memory at the passed
+/// `physical_memory_offset`. This function must be only called once to avoid
+/// aliasing `&mut` references (which is undefined behavior).
 pub unsafe fn init(phys_mem_offset: VirtAddr) -> OffsetPageTable<'static> {
     PHYS_MEM_OFFSET.call_once(|| phys_mem_offset);
     unsafe {
@@ -101,9 +101,8 @@ pub struct BootInfoFrameAllocator {
 impl BootInfoFrameAllocator {
     /// Create a FrameAllocator from the passed memory map.
     ///
-    /// This function is unsafe because the caller must guarantee that the passed
-    /// memory map is valid. The main requirement is that all frames that are marked
-    /// as `USABLE` in it are really unused.
+    /// # Safety
+    /// Passed memory map must be valid. All frames marked as `USABLE` must be truly unused.
     pub unsafe fn init(memory_map: &'static MemoryRegions) -> Self {
         BootInfoFrameAllocator {
             memory_map,

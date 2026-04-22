@@ -1,5 +1,5 @@
 use super::camera::Camera;
-use super::world::{WORLD_X, WORLD_Y, WORLD_Z, World, empty_world};
+use super::world::{World, empty_world};
 use glam::Vec3;
 
 const MAGIC: &[u8; 4] = b"MCOS";
@@ -43,12 +43,14 @@ pub fn serialize(world: &World, camera: &Camera) -> [u8; 1024] {
     buf[28..32].copy_from_slice(&camera.v_fov.to_le_bytes());
 
     // World blocks
-    let mut offset = 32;
-    for x in 0..WORLD_X {
-        for y in 0..WORLD_Y {
-            for z in 0..WORLD_Z {
-                buf[offset] = if world[x][y][z] { 1 } else { 0 };
-                offset += 1;
+    {
+        let mut offset = 32;
+        for plane in world {
+            for row in plane {
+                for &block in row {
+                    buf[offset] = if block { 1 } else { 0 };
+                    offset += 1;
+                }
             }
         }
     }
@@ -89,10 +91,10 @@ pub fn deserialize(buf: &[u8; 1024]) -> Result<(World, Camera), SaveError> {
     // World blocks
     let mut world = empty_world();
     let mut offset = 32;
-    for x in 0..WORLD_X {
-        for y in 0..WORLD_Y {
-            for z in 0..WORLD_Z {
-                world[x][y][z] = buf[offset] != 0;
+    for plane in &mut world {
+        for row in plane {
+            for block in row {
+                *block = buf[offset] != 0;
                 offset += 1;
             }
         }

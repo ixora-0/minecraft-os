@@ -31,7 +31,7 @@ impl Handler for KernelACPI {
                 .expect("Failed to get virtual address"),
             region_length: size,
             mapped_length,
-            handler: self.clone(),
+            handler: *self,
         }
     }
 
@@ -158,7 +158,7 @@ pub fn init(rsdp_addr: u64) {
 
     // have to create new AcpiTables because it doesn't have clone
     let tables_for_aml = unsafe {
-        match AcpiTables::from_rsdp(handler.clone(), rsdp_addr) {
+        match AcpiTables::from_rsdp(handler, rsdp_addr) {
             Ok(t) => t,
             Err(e) => {
                 log::error!("Failed to create AcpiTables for AML: {:?}", e);
@@ -267,13 +267,13 @@ pub fn shutdown() {
 fn get_slp_typ_s5(aml_interpreter: &aml::Interpreter<KernelACPI>) -> Result<u16, AmlError> {
     let s5_name = AmlName::from_components(vec![
         NameComponent::Root,
-        NameComponent::Segment(NameSeg::from_bytes([b'_', b'S', b'5', b'_'])?),
+        NameComponent::Segment(NameSeg::from_bytes(*b"_S5_")?),
     ]);
     let s5 = aml_interpreter.evaluate(s5_name, vec![])?;
     match &*s5 {
         Object::Package(elements) => {
             // \_S5_ package: [SLP_TYP_a, SLP_TYP_b, ...]
-            let slp_typ_a = elements.get(0).ok_or(AmlError::MethodArgCountIncorrect)?;
+            let slp_typ_a = elements.first().ok_or(AmlError::MethodArgCountIncorrect)?;
             let val = slp_typ_a.as_integer()?;
             Ok(val as u16)
         }

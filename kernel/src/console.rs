@@ -113,11 +113,10 @@ impl Console {
                 None
             }
             _ => {
-                if let Some(ch) = event.character {
-                    if !ch.is_control() && self.input.len() < MAX_INPUT_LEN {
-                        self.input.push(ch);
-                        self.update_text();
-                    }
+                let ch = event.character?;
+                if !ch.is_control() && self.input.len() < MAX_INPUT_LEN {
+                    self.input.push(ch);
+                    self.update_text();
                 }
                 None
             }

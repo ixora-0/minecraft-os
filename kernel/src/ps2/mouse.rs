@@ -205,7 +205,7 @@ impl Ps2Mouse {
             self.y,
             self.buttons
         );
-        return Some(packet);
+        Some(packet)
     }
 
     pub fn reset_position(&mut self) {
