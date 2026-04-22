@@ -6,8 +6,8 @@ use crate::{
     rendering::{Color, Frame, Rectangle},
 };
 
-const VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap());
-const LIGHT_DIRECTION: Lazy<Vec3> = Lazy::new(|| Vec3::new(-1.0, -1.0, 0.2).normalize());
+static VOID_COLOR: Lazy<Color> = Lazy::new(|| Color::parse_hex("#82CAFF").unwrap());
+static LIGHT_DIRECTION: Lazy<Vec3> = Lazy::new(|| Vec3::new(-1.0, -1.0, 0.2).normalize());
 const CROSSHAIR_COLOR: Color = Color::BLACK;
 const CROSSHAIR_LEN: f32 = 5.0;
 const CROSSHAIR_THICKNESS: f32 = 2.0;
@@ -186,7 +186,7 @@ mod tests {
             for x in 0..info.width {
                 let idx = pixel_index(&info, x, y);
                 if (2..6).contains(&x) && (2..6).contains(&y) {
-                    assert_eq!(color[idx], (*VOID_COLOR).red);
+                    assert_eq!(color[idx], VOID_COLOR.red);
                 } else {
                     assert_eq!(color[idx], 0);
                 }

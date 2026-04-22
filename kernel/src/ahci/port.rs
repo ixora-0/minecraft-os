@@ -100,7 +100,7 @@ unsafe fn setup_command(
     // tells HBA where to put the data
     table.prdt[0].dba = buffer_phys as u32;
     table.prdt[0].dbau = (buffer_phys >> 32) as u32;
-    table.prdt[0].dbc = (byte_count - 1) | 0; // no interrupt on completion
+    table.prdt[0].dbc = byte_count - 1; // no interrupt on completion
 }
 
 /// Build an H2D Register FIS for an ATA command with LBA48 addressing.
@@ -132,6 +132,10 @@ fn build_h2d_fis(command: u8, lba: u64, count: u16) -> [u8; 20] {
 
 /// Read sectors from an AHCI port using READ DMA EXT.
 /// DMA writes into the bounce buffer at `dma_buf_phys`; caller reads from `dma_buf_virt`.
+///
+/// # Safety
+/// `port`, `cmd_list`, and `cmd_table_virt` must point to valid, initialized AHCI structures;
+/// `dma_buf_phys` must be a valid DMA-capable physical address.
 pub unsafe fn read_sectors(
     port: *mut HbaPort,
     cmd_list: *mut HbaCommandHeader,
@@ -160,6 +164,10 @@ pub unsafe fn read_sectors(
 
 /// Write sectors to an AHCI port using WRITE DMA EXT.
 /// Caller writes data into `dma_buf_virt` before calling; DMA reads from `dma_buf_phys`.
+///
+/// # Safety
+/// `port`, `cmd_list`, and `cmd_table_virt` must point to valid, initialized AHCI structures;
+/// `dma_buf_phys` must be a valid DMA-capable physical address.
 pub unsafe fn write_sectors(
     port: *mut HbaPort,
     cmd_list: *mut HbaCommandHeader,
@@ -187,6 +195,10 @@ pub unsafe fn write_sectors(
 }
 
 /// Send IDENTIFY DEVICE command. Result is DMA'd into the bounce buffer.
+///
+/// # Safety
+/// `port`, `cmd_list`, and `cmd_table_virt` point to valid, initialized AHCI structures;
+/// `dma_buf_phys` must be a valid DMA-capable physical address.
 pub unsafe fn identify(
     port: *mut HbaPort,
     cmd_list: *mut HbaCommandHeader,

@@ -296,23 +296,23 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             let world = game::world::WORLD.lock();
             camera.looking_at_solid_block(&world, 5.0)
         };
-        if clicks.left {
-            if let Some((block_pos, ref _face)) = targeted_block {
-                let mut world = game::world::WORLD.lock();
-                world[block_pos.x][block_pos.y][block_pos.z] = false;
-                // have to rebuild world mesh
-                mesh = game::world::get_world_mesh(&world);
-            }
+        if clicks.left
+            && let Some((block_pos, ref _face)) = targeted_block
+        {
+            let mut world = game::world::WORLD.lock();
+            world[block_pos.x][block_pos.y][block_pos.z] = false;
+            // have to rebuild world mesh
+            mesh = game::world::get_world_mesh(&world);
         }
-        if clicks.right {
-            if let Some((block_pos, ref face)) = targeted_block {
-                let offset = face.offset();
-                let new = block_pos.wrapping_add_signed(offset);
-                if world::is_in_bounds(new) {
-                    let mut world = game::world::WORLD.lock();
-                    world[new.x][new.y][new.z] = true;
-                    mesh = game::world::get_world_mesh(&world);
-                }
+        if clicks.right
+            && let Some((block_pos, ref face)) = targeted_block
+        {
+            let offset = face.offset();
+            let new = block_pos.wrapping_add_signed(offset);
+            if world::is_in_bounds(new) {
+                let mut world = game::world::WORLD.lock();
+                world[new.x][new.y][new.z] = true;
+                mesh = game::world::get_world_mesh(&world);
             }
         }
 

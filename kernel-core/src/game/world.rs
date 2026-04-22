@@ -14,15 +14,13 @@ pub const fn empty_world() -> World {
 }
 
 /// Global world blocks storage.
-/// Indexed as [x][y][z], where true = solid block, false = air.
+/// Indexed as `[x][y][z]`, where true = solid block, false = air.
 pub static WORLD: Lazy<Mutex<World>> = Lazy::new(|| {
     // initialize with a 4-layer thick floor of solid blocks.
     let mut w = empty_world();
-    for y in 0..2 {
-        for x in 0..WORLD_Y {
-            for z in 0..WORLD_X {
-                w[x][y][z] = true;
-            }
+    for y in 0..4 {
+        for yz_plane in w.iter_mut() {
+            yz_plane[y].fill(true);
         }
     }
     w[0][2][0] = true;
@@ -227,11 +225,9 @@ mod tests {
     #[test]
     fn solid_2x2x2_cube() {
         let mut world = empty_world();
-        for x in 0..2 {
-            for y in 0..2 {
-                for z in 0..2 {
-                    world[x][y][z] = true;
-                }
+        for plane in world[..2].iter_mut() {
+            for row in plane[..2].iter_mut() {
+                row[..2].fill(true);
             }
         }
         let mesh = get_world_mesh(&world);

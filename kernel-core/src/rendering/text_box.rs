@@ -18,33 +18,33 @@ static FONT: Lazy<Font> = Lazy::new(|| {
 });
 
 const MAX_CACHE_ENTRIES: usize = 256;
-static GLYPH_CACHE: Lazy<Mutex<HashMap<(char, u32), Arc<(Metrics, Vec<u8>)>>>> =
+type GlyphData = Arc<(Metrics, Vec<u8>)>;
+static GLYPH_CACHE: Lazy<Mutex<HashMap<(char, u32), GlyphData>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 static CACHE_ORDER: Mutex<Deque<(char, u32), MAX_CACHE_ENTRIES>> = Mutex::new(Deque::new());
 
 /// returns metric and bitmap of glyph from FONT
 fn get_raster(c: char, size: u32) -> Arc<(Metrics, Vec<u8>)> {
-    let size_key = size as u32;
     let mut cache = GLYPH_CACHE.lock();
 
-    if let Some(entry) = cache.get(&(c, size_key)) {
+    if let Some(entry) = cache.get(&(c, size)) {
         // can update order here if we want LRU cache
         return Arc::clone(entry);
     }
 
     let mut order = CACHE_ORDER.lock();
     let entry = FONT.rasterize(c, size as f32);
-    if cache.len() >= MAX_CACHE_ENTRIES {
-        if let Some(oldest) = order.pop_front() {
-            cache.remove(&oldest);
-        }
+    if cache.len() >= MAX_CACHE_ENTRIES
+        && let Some(oldest) = order.pop_front()
+    {
+        cache.remove(&oldest);
     }
 
     let entry = Arc::new(entry);
     // only pushing to order when we also insert into cache
     // and we alread checked for cache length exceeding capacity
-    unsafe { order.push_back_unchecked((c, size_key)) }
-    cache.insert((c, size_key), Arc::clone(&entry));
+    unsafe { order.push_back_unchecked((c, size)) }
+    cache.insert((c, size), Arc::clone(&entry));
     entry
 }
 
@@ -65,8 +65,8 @@ pub struct TextBoxConfig {
     /// background color
     pub color_bg: super::Color,
 }
-impl TextBoxConfig {
-    pub fn default() -> Self {
+impl Default for TextBoxConfig {
+    fn default() -> Self {
         Self {
             font_size: 14,
             line_spacing: 0,
@@ -96,20 +96,19 @@ pub struct Glyph {
 }
 impl Glyph {
     pub fn printable_char(&self) -> char {
-        return self.b as char;
+        self.b as char
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LogicalLine(Vec<Glyph>);
-impl Default for LogicalLine {
-    fn default() -> Self {
-        Self(Vec::new())
-    }
-}
 impl LogicalLine {
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
     pub fn push(&mut self, glyph: Glyph) {
         self.0.push(glyph);
@@ -123,7 +122,7 @@ impl Index<Range<usize>> for LogicalLine {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct VisualLine {
     /// index of logical line in the buffer this visual line is part of
     pub line_idx: usize,
@@ -132,17 +131,8 @@ pub struct VisualLine {
     /// end within logical line (exclusive)
     pub end: usize,
 }
-impl Default for VisualLine {
-    fn default() -> Self {
-        Self {
-            line_idx: 0,
-            start: 0,
-            end: 0,
-        }
-    }
-}
 
-fn visual_line_slice<'a>(visual_line: &VisualLine, buffer: &'a Vec<LogicalLine>) -> &'a [Glyph] {
+fn visual_line_slice<'a>(visual_line: &VisualLine, buffer: &'a [LogicalLine]) -> &'a [Glyph] {
     &buffer[visual_line.line_idx][visual_line.start..visual_line.end]
 }
 
@@ -191,7 +181,7 @@ impl Parser {
         }
 
         // safety check, buffer shouldn't be empty when function is called
-        if buffer.len() == 0 {
+        if buffer.is_empty() {
             buffer.push(LogicalLine::default());
         }
 
@@ -474,15 +464,15 @@ impl TextBox {
     /// render bitmap at x and y. y is at baseline
     fn render_char(
         &self,
-        bitmap: &Vec<u8>,
+        bitmap: &[u8],
         metrics: Metrics,
         color: Color,
         x: i32,
         y: i32,
         renderer: &mut Renderer,
     ) {
-        let tx = self.bounding_box.top_left.x as i32 + x + metrics.xmin;
-        let ty = self.bounding_box.top_left.y as i32 + y - metrics.height as i32 - metrics.ymin;
+        let tx = self.bounding_box.top_left.x + x + metrics.xmin;
+        let ty = self.bounding_box.top_left.y + y - metrics.height as i32 - metrics.ymin;
 
         let pixels = bitmap.iter().enumerate().flat_map(|(i, intensity)| {
             let px = i % metrics.width;

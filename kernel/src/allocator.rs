@@ -30,8 +30,19 @@ impl HeapWithTracker {
         self.allocated_bytes.load(Ordering::SeqCst)
     }
 
+    /// Initialize the heap with the given memory region.
+    ///
+    /// # Safety
+    /// Memory region `[start, start + size)` must be valid, unused,
+    /// and does not overlap with any other allocated memory.
     pub unsafe fn init(&self, start: *mut u8, size: usize) {
         unsafe { self.inner.lock().init(start, size) };
+    }
+}
+
+impl Default for HeapWithTracker {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -44,7 +55,7 @@ unsafe impl GlobalAlloc for HeapWithTracker {
             .lock()
             .allocate_first_fit(layout)
             .ok()
-            .map_or(0 as *mut u8, |allocation| allocation.as_ptr())
+            .map_or(core::ptr::null_mut(), |allocation| allocation.as_ptr())
     }
 
     /// copied from `LockedHeap`'s `dealloc`

@@ -304,6 +304,12 @@ impl Ps2Controller {
     }
 }
 
+impl Default for Ps2Controller {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn init_keyboard(ps2: &mut Ps2Controller) {
     // reset
     {

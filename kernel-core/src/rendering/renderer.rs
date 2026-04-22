@@ -312,7 +312,11 @@ impl<'f> Renderer<'f> {
     }
 
     pub fn clear(&mut self, color: Color) {
-        debug_assert!(self.framebuffer.len() % self.info.bytes_per_pixel == 0);
+        debug_assert!(
+            self.framebuffer
+                .len()
+                .is_multiple_of(self.info.bytes_per_pixel)
+        );
         let len = self.framebuffer.len();
         if len == 0 {
             return;
@@ -666,10 +670,15 @@ impl<'f> Renderer3d<'f> {
             let depth_row_offset = &mut self.depth_buffer[y * w..(y + 1) * w];
             let buffer_row_offset = y * self.info.stride * bpp;
 
-            for x in xi_left..=xi_right {
+            for (x, depth) in depth_row_offset
+                .iter_mut()
+                .enumerate()
+                .skip(xi_left)
+                .take(xi_right - xi_left + 1)
+            {
                 // depth buffer uses reverse z (far to near)
-                if z > depth_row_offset[x] {
-                    depth_row_offset[x] = z;
+                if z > *depth {
+                    *depth = z;
                     let off = buffer_row_offset + x * bpp;
                     self.buffer[off..off + bpp].copy_from_slice(color_bytes);
                 }
