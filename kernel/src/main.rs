@@ -144,7 +144,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         let allocated = kernel::allocator::ALLOCATOR.get_allocated_bytes();
         let available = allocator::HEAP_SIZE;
         log::info!(
-            "Alocated bytes after init sequence: {} / {} ({}%)",
+            "Allocated bytes after init sequence: {} / {} ({}%)",
             allocated,
             available,
             (allocated as f32 / available as f32 * 100.0) as u32
