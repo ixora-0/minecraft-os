@@ -273,12 +273,27 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                     }
                 } else {
                     match trimmed {
+                        "help" => {
+                            log::info!("Available commands:");
+                            log::info!("  help             — show this message");
+                            log::info!("  set-lba <number> — set disk sector for save/load");
+                            log::info!("  save             — save world to disk");
+                            log::info!("  load             — load world from disk");
+                            log::info!("  fps              — toggle FPS display");
+                            log::info!("  shutdown         — power off");
+                            log::info!("Controls: WASD move, mouse look, Space/Shift up/down");
+                            log::info!("  T or Enter — open console    Esc — close console");
+                            log::info!("  ` — toggle log visibility    Arrows — scroll log");
+                        }
                         "shutdown" => kernel::acpi::shutdown(),
-                        _ => {}
                         "fps" => {
                             log_fps = !log_fps;
                             log::info!("FPS logging: {}", if log_fps { "on" } else { "off" });
                         }
+                        _ => log::warn!(
+                            "Unknown command: \"{}\". Type \"help\" for a list.",
+                            trimmed
+                        ),
                     }
                 }
             }
