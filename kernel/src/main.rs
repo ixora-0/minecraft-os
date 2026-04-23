@@ -7,6 +7,7 @@ use bootloader_api::BootInfo;
 use core::panic::PanicInfo;
 use glam::{IVec2, USizeVec2, Vec3};
 use kernel::ps2::keyboard::KeyboardEvent;
+use kernel::timer;
 use kernel::{
     BOOTLOADER_CONFIG,
     allocator::{self},
@@ -159,7 +160,20 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     const MOUSE_SENSITIVITY: f32 = 0.0015;
     const SPEED: f32 = 0.15;
     const PI: f32 = core::f32::consts::PI;
+    const REFRESH_INTERVAL_NS: u64 = {
+        const FPS_CAP: u64 = 60;
+        1_000_000_000 / FPS_CAP
+    };
+    let mut prev_time = timer::nanos_since_boot(); // track time since last frame refresh
     loop {
+        // capping fps
+        let elapsed = timer::nanos_since_boot() - prev_time;
+        if elapsed < REFRESH_INTERVAL_NS {
+            timer::sleep(REFRESH_INTERVAL_NS - elapsed);
+        }
+        let now = timer::nanos_since_boot();
+        prev_time = now;
+
         // mouse
         let (dx, dy) = ps2::with_ps2_mouse_mut(|mouse| mouse.pop_delta());
         let clicks = ps2::with_ps2_mouse_mut(|mouse| mouse.pop_clicks());
