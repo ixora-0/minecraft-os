@@ -237,7 +237,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                 if trimmed.is_empty() {
                     continue;
                 }
-                log::info!("[console] {}", trimmed);
                 if let Some(lba_str) = trimmed.strip_prefix("set-lba ") {
                     match lba_str.trim().parse::<u64>() {
                         Ok(lba) => {
