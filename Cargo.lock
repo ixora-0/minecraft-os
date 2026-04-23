@@ -561,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "kernel"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "acpi",
  "bootloader_api",
@@ -581,7 +581,7 @@ dependencies = [
 
 [[package]]
 name = "kernel-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "approx",
  "bootloader_api",
@@ -700,7 +700,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "minecraft-os"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bootloader",
  "bootloader-boot-config",
@@ -1074,7 +1074,7 @@ dependencies = [
 
 [[package]]
 name = "tests-integration"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bootloader_api",
  "kernel",
@@ -1086,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "tests-qemu-exit-code"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "thiserror"
