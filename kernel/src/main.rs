@@ -98,21 +98,21 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     };
 
     log::info!("{:?}", global_renderer_info);
-
     const ASCII: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ\nabcdefghijklmnopqrstuvwxyz\n0123456789\n!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
     log::info!("ASCII:\n{}", ASCII);
+    log::logger().flush();
 
     // --- ACPI ---
     let rsdp_addr = match boot_info.rsdp_addr.into_option() {
         Some(rsdp_addr) => rsdp_addr,
         None => panic!("No RSDP was found (BIOS) or reported (UEFI)"),
     };
+
     kernel::acpi::init(rsdp_addr);
     kernel::pci::init();
     kernel::ahci::init();
     kernel::nvme::init();
     kernel::storage::init();
-
     kernel::ps2::init();
     kernel::timer::init();
 
