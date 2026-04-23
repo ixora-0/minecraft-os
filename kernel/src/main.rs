@@ -164,6 +164,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         const FPS_CAP: u64 = 60;
         1_000_000_000 / FPS_CAP
     };
+    let mut log_fps = false;
     let mut prev_time = timer::nanos_since_boot(); // track time since last frame refresh
     loop {
         // capping fps
@@ -172,6 +173,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             timer::sleep(REFRESH_INTERVAL_NS - elapsed);
         }
         let now = timer::nanos_since_boot();
+        if log_fps {
+            log::debug!("FPS: {}", 1_000_000_000.0 / elapsed as f32);
+        }
         prev_time = now;
 
         // mouse
@@ -271,6 +275,10 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                     match trimmed {
                         "shutdown" => kernel::acpi::shutdown(),
                         _ => {}
+                        "fps" => {
+                            log_fps = !log_fps;
+                            log::info!("FPS logging: {}", if log_fps { "on" } else { "off" });
+                        }
                     }
                 }
             }
