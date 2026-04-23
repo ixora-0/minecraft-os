@@ -23,7 +23,6 @@ pub static WORLD: Lazy<Mutex<World>> = Lazy::new(|| {
             yz_plane[y].fill(true);
         }
     }
-    w[0][2][0] = true;
     Mutex::new(w)
 });
 

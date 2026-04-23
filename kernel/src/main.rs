@@ -123,9 +123,13 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     use kernel_core::game;
     let mut camera = game::Camera::default();
-    camera.set_position(-3.0, 5.0, -2.0);
-    camera.yaw = -50.0_f32.to_radians();
-    camera.pitch = -35.0_f32.to_radians();
+    camera.set_position(
+        world::WORLD_X as f32 / 2.0,
+        world::WORLD_Y as f32 / 2.0 + 1.5,
+        world::WORLD_Z as f32 / 2.0,
+    );
+    camera.yaw = 0.0;
+    camera.pitch = 0.0;
 
     let screen = {
         let width = global_renderer_info.width.min(1280);
