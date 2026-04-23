@@ -4,7 +4,7 @@ use core::{cmp::min, ops::Index, ops::Range};
 use super::Color;
 use alloc::{sync::Arc, vec::Vec};
 use fontdue::{Font, Metrics};
-use glam::IVec2;
+use glam::{IVec2, USizeVec2};
 use hashbrown::HashMap;
 use heapless::Deque;
 
@@ -277,6 +277,8 @@ pub struct TextBox {
     visual_lines: Vec<VisualLine>,
     scroll_offset: usize,
     parser: Parser,
+    /// If Some(n), draw a vertical line cursor before the n-th glyph (across all visual lines).
+    cursor_idx: Option<usize>,
 }
 impl TextBox {
     pub fn new(bounding_box: Rectangle) -> Self {
@@ -291,6 +293,7 @@ impl TextBox {
                 color_text: config.color_text,
             }),
             cursor_x: config.padding_left,
+            cursor_idx: None,
 
             // calculated in recalculate_metrics
             line_height: 0,
@@ -309,6 +312,7 @@ impl TextBox {
         self.visual_lines.push(VisualLine::default());
         self.scroll_offset = 0;
         self.cursor_x = self.config.padding_left;
+        self.cursor_idx = None;
         self.parser = Parser::new(Style {
             color_text: self.config.color_text,
         });
@@ -384,6 +388,10 @@ impl TextBox {
         }
     }
 
+    pub fn set_cursor_index(&mut self, index: Option<usize>) {
+        self.cursor_idx = index;
+    }
+
     pub fn push_byte(&mut self, b: u8) {
         match self.parser.push_byte(b, &mut self.buffer) {
             ParserResult::PushedGlyph(glyph) => self.update_last_line_layout(glyph),
@@ -445,17 +453,27 @@ impl TextBox {
             &self.visual_lines[start..end]
         };
 
+        // total glyph count for cursor positioning
+        let total_glyphs: usize = self.buffer.iter().map(|l| l.len()).sum();
+
         // Y value of baseline of current line, relative to top of bounding box
         let mut y =
             self.bounding_box.size.y as i32 - self.config.padding_bottom - self.line_descent;
         for line in lines_to_render.iter().rev() {
             let mut x = self.config.padding_left;
             let visual_line = visual_line_slice(line, &self.buffer);
-            for glyph in visual_line {
+            for (i, glyph) in visual_line.iter().enumerate() {
+                let flat_idx = line.start + i;
+                if self.cursor_idx == Some(flat_idx) {
+                    self.render_cursor(x, y, renderer);
+                }
                 let glyph_data = get_raster(glyph.printable_char(), self.config.font_size);
                 let (metrics, bitmap) = glyph_data.as_ref();
                 self.render_char(bitmap, *metrics, glyph.style.color_text, x, y, renderer);
                 x += self.calc_advance(metrics);
+            }
+            if self.cursor_idx == Some(total_glyphs) && line.end == total_glyphs {
+                self.render_cursor(x, y, renderer);
             }
             y -= self.line_height + self.config.line_spacing;
         }
@@ -487,6 +505,21 @@ impl TextBox {
             }
         });
         renderer.draw_iter(pixels);
+    }
+
+    /// Draw a vertical line cursor at (x, y) where y is the baseline
+    fn render_cursor(&self, x: i32, y: i32, renderer: &mut Renderer) {
+        const CURSOR_WIDTH: usize = 1;
+        let cursor_top = y + self.line_ascent; // ascent is negative, so this goes up
+        let cursor_height = (self.line_descent - self.line_ascent) as usize;
+        let rect = Rectangle {
+            top_left: IVec2::new(
+                self.bounding_box.top_left.x + x,
+                self.bounding_box.top_left.y + cursor_top,
+            ),
+            size: USizeVec2::new(CURSOR_WIDTH, cursor_height),
+        };
+        renderer.fill_solid(&rect, self.config.color_text);
     }
 
     pub fn get_current_text_color(&self) -> Color {

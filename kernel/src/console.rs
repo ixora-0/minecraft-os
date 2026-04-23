@@ -17,6 +17,7 @@ pub struct Console {
     bounds: Rectangle,
     text_box: TextBox,
     input: String,
+    cursor_pos: usize,
     active: bool,
     visible: bool,
 }
@@ -42,6 +43,7 @@ impl Console {
             bounds,
             text_box,
             input: String::new(),
+            cursor_pos: 0,
             active: false,
             visible: true,
         };
@@ -72,6 +74,9 @@ impl Console {
             return;
         }
         self.active = active;
+        if active {
+            self.cursor_pos = self.input.len();
+        }
         self.update_text();
     }
 
@@ -99,23 +104,40 @@ impl Console {
         match event.code {
             KeyCode::Return => {
                 let command = core::mem::take(&mut self.input);
+                self.cursor_pos = 0;
                 self.update_text();
                 self.set_active(false);
                 Some(command)
             }
             KeyCode::Backspace => {
-                self.input.pop();
-                self.update_text();
+                if self.cursor_pos > 0 {
+                    self.input.remove(self.cursor_pos - 1);
+                    self.cursor_pos -= 1;
+                    self.update_text();
+                }
                 None
             }
             KeyCode::Escape => {
                 self.set_active(false);
                 None
             }
+            KeyCode::ArrowLeft => {
+                self.cursor_pos = self.cursor_pos.saturating_sub(1);
+                self.update_text();
+                None
+            }
+            KeyCode::ArrowRight => {
+                if self.cursor_pos < self.input.len() {
+                    self.cursor_pos += 1;
+                    self.update_text();
+                }
+                None
+            }
             _ => {
                 let ch = event.character?;
                 if !ch.is_control() && self.input.len() < MAX_INPUT_LEN {
-                    self.input.push(ch);
+                    self.input.insert(self.cursor_pos, ch);
+                    self.cursor_pos += 1;
                     self.update_text();
                 }
                 None
@@ -142,5 +164,11 @@ impl Console {
             format!("{}{}", PROMPT, self.input)
         };
         self.text_box.set_text(&content);
+        if self.active {
+            self.text_box
+                .set_cursor_index(Some(PROMPT.len() + self.cursor_pos));
+        } else {
+            self.text_box.set_cursor_index(None);
+        }
     }
 }
