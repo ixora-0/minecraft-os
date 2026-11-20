@@ -46,3 +46,8 @@ bootloader-boot-config.workspace = true
 wait-timeout.workspace = true
 tests-qemu-exit-code = { path = "tests-qemu-exit-code" }
 clap.workspace = true
+
+# The kernel is an artifact build-dependency, so it is compiled with the
+# build-override profile (opt-level 0 by default) even in release builds.
+[profile.release.build-override]
+opt-level = 3
