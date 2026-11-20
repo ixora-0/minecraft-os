@@ -1,5 +1,5 @@
 use std::{
-    env,
+    env, fs,
     path::Path,
     process::{self, Command},
 };
@@ -51,6 +51,15 @@ fn main() {
     qemu.arg("-drive")
         .arg(format!("format=raw,file={}", args.image));
     qemu.arg("-serial").arg("stdio");
+    // hardware acceleration if available, falls back to TCG otherwise
+    if fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/kvm")
+        .is_ok()
+    {
+        qemu.arg("-accel").arg("kvm").arg("-cpu").arg("host");
+    }
 
     if args.ahci {
         qemu.arg("-drive")
