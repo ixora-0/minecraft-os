@@ -11,5 +11,7 @@ libm.workspace = true
 spin.workspace = true
 log.workspace = true
 glam.workspace = true
-approx.workspace = true
 heapless.workspace = true
+
+[dev-dependencies]
+approx.workspace = true

@@ -19,7 +19,6 @@ ovmf-prebuilt = "0.2.7"
 wait-timeout = "0.1.5"
 x86_64 = { version = "0.15.4", default-features = false, features = ["instructions", "abi_x86_interrupt", "const_fn", "asm_const"] }
 log = { version = "0.4.17", default-features = false }
-conquer-once = { version = "0.4.0", default-features = false }
 spin = "0.10.0"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 uart_16550 = "0.2.19"

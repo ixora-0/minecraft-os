@@ -15,5 +15,7 @@ kernel = { path = "../kernel" }
 bootloader_api.workspace = true
 x86_64.workspace = true
 lazy_static.workspace = true
-volatile.workspace = true
 tests-qemu-exit-code = { path = "../tests-qemu-exit-code" }
+
+[dev-dependencies]
+volatile.workspace = true
