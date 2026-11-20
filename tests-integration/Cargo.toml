@@ -8,6 +8,7 @@ default-target = "x86_64-unknown-none"
 
 [lib]
 test = false
+bench = false
 
 [dependencies]
 kernel = { path = "../kernel" }
