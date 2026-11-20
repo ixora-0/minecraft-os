@@ -8,7 +8,6 @@
 use bootloader_api::info::BootInfo;
 use core::panic::PanicInfo;
 use core::ptr::NonNull;
-use kernel;
 use kernel::serial_println;
 use lazy_static::lazy_static;
 use tests_integration::{exit_qemu, test_panic_handler};
@@ -58,7 +57,7 @@ extern "x86-interrupt" fn test_double_fault_handler(
 ) -> ! {
     serial_println!("[ok]");
     exit_qemu(QemuExitCode::Success);
-    loop {}
+    kernel::hlt_loop()
 }
 
 #[panic_handler]

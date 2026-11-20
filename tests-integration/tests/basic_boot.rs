@@ -5,7 +5,6 @@
 #![reexport_test_harness_main = "test_main"]
 
 use core::panic::PanicInfo;
-use kernel;
 use tests_integration::test_panic_handler;
 
 use bootloader_api::info::BootInfo;
@@ -24,6 +23,7 @@ fn panic(info: &PanicInfo) -> ! {
 }
 
 #[test_case]
+#[allow(clippy::eq_op)]
 fn trivial_assertion() {
     assert_eq!(1, 1);
 }
