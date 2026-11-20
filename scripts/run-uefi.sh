@@ -10,17 +10,19 @@
 # Expects OVMF_CODE.fd and OVMF_VARS.fd to sit next to this script (as shipped
 # in the GitHub release), or in the current working directory.
 
-set -euo pipefail
+set -eu
 
-if [[ $# -lt 1 ]]; then
+if [ $# -lt 1 ]; then
   echo "usage: $0 <path-to-uefi.img> [--nvme] [--ahci] [extra qemu args...]" >&2
   exit 1
 fi
 
 NVME=false
 AHCI=false
+IMAGE=
 
-while [[ $# -gt 0 ]]; do
+# Options may come before or after the image; anything after that goes to QEMU.
+while [ $# -gt 0 ]; do
   case "$1" in
     --nvme)
       NVME=true
@@ -30,25 +32,27 @@ while [[ $# -gt 0 ]]; do
       AHCI=true
       shift
       ;;
-    -*)
-      break
-      ;;
     *)
-      break
+      if [ -n "$IMAGE" ]; then
+        break
+      fi
+      IMAGE="$1"
+      shift
       ;;
   esac
 done
 
-IMAGE="$1"
-shift
+if [ -z "$IMAGE" ]; then
+  echo "error: missing path to UEFI image." >&2
+  exit 1
+fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 find_firmware() {
-  local name="$1"
   for dir in "$SCRIPT_DIR" "$PWD"; do
-    if [[ -f "$dir/$name" ]]; then
-      echo "$dir/$name"
+    if [ -f "$dir/$1" ]; then
+      echo "$dir/$1"
       return 0
     fi
   done
@@ -66,35 +70,45 @@ OVMF_VARS="$(find_firmware OVMF_VARS.fd)" || {
 }
 
 # Copy VARS to a writable temp file (QEMU writes back to it).
-VARS_TMP="$(mktemp --suffix=.fd)"
+VARS_TMP="$(mktemp "${TMPDIR:-/tmp}/ovmf_vars.XXXXXX")"
 trap 'rm -f "$VARS_TMP"' EXIT
 cp "$OVMF_VARS" "$VARS_TMP"
 
 # Create disk images if they don't exist.
-[[ "$AHCI" == true && ! -f AHCI.img ]] && qemu-img create -f raw AHCI.img 1M
-[[ "$NVME" == true && ! -f NVME.img ]] && qemu-img create -f raw NVME.img 1M
-
-QEMU_ARGS=(
-  -drive "format=raw,if=pflash,readonly=on,file=$OVMF_CODE"
-  -drive "format=raw,if=pflash,file=$VARS_TMP"
-  -drive "format=raw,file=$IMAGE"
-  -serial stdio
-  -m 512M
-)
-
-if [[ "$AHCI" == true ]]; then
-  QEMU_ARGS+=(
-    -drive "id=disk,file=AHCI.img,format=raw,if=none"
-    -device "ich9-ahci,id=ahci"
-    -device "ide-hd,drive=disk,bus=ahci.0"
-  )
+if [ "$AHCI" = true ] && [ ! -f AHCI.img ]; then
+  qemu-img create -f raw AHCI.img 1M
+fi
+if [ "$NVME" = true ] && [ ! -f NVME.img ]; then
+  qemu-img create -f raw NVME.img 1M
 fi
 
-if [[ "$NVME" == true ]]; then
-  QEMU_ARGS+=(
-    -drive "id=nvme-disk,file=NVME.img,format=raw,if=none"
-    -device "nvme,serial=deadbeef,drive=nvme-disk"
-  )
+if [ "$NVME" = true ]; then
+  set -- \
+    -drive "id=nvme-disk,file=NVME.img,format=raw,if=none" \
+    -device "nvme,serial=deadbeef,drive=nvme-disk" \
+    "$@"
 fi
 
-exec qemu-system-x86_64 "${QEMU_ARGS[@]}" "$@"
+if [ "$AHCI" = true ]; then
+  set -- \
+    -drive "id=disk,file=AHCI.img,format=raw,if=none" \
+    -device "ich9-ahci,id=ahci" \
+    -device "ide-hd,drive=disk,bus=ahci.0" \
+    "$@"
+fi
+
+# Hardware acceleration if available, falls back to TCG otherwise.
+if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+  set -- -accel kvm -cpu host "$@"
+fi
+
+set -- \
+  -drive "format=raw,if=pflash,readonly=on,file=$OVMF_CODE" \
+  -drive "format=raw,if=pflash,file=$VARS_TMP" \
+  -drive "format=raw,file=$IMAGE" \
+  -serial stdio \
+  -m 512M \
+  "$@"
+
+# Not exec'd, so the EXIT trap still cleans up the temp VARS file.
+qemu-system-x86_64 "$@"
