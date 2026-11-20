@@ -1,8 +1,13 @@
 default:
     @just --list
 
+alias r:= run
 run *ARGS:
     cargo run -p minecraft-os -- {{ARGS}}
+
+alias rr := run-release
+run-release *ARGS:
+    cargo run --release -p minecraft-os -- {{ARGS}}
 
 run-bios *ARGS:
     cargo run -p minecraft-os --bin qemu-bios -- {{ARGS}}
