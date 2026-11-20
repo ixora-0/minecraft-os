@@ -78,18 +78,25 @@ pub struct MousePacket {
 
 impl MousePacket {
     pub fn from_bytes(byte_state: u8, byte_x: u8, byte_y: u8, byte_4: Option<u8>) -> Self {
-        // not handling overflow
-        // const X_OVERFLOW_BIT: u8 = 1 << 6;
-        // const Y_OVERFLOW_BIT: u8 = 1 << 7;
-        // let x_overflow = (byte_state & X_OVERFLOW_BIT) != 0;
-        // let y_overflow = (byte_state & Y_OVERFLOW_BIT) != 0;
-
         const SIGN_X_BIT: u8 = 1 << 4;
         const SIGN_Y_BIT: u8 = 1 << 5;
+        const X_OVERFLOW_BIT: u8 = 1 << 6;
+        const Y_OVERFLOW_BIT: u8 = 1 << 7;
         let sign_x = (byte_state & SIGN_X_BIT) != 0;
         let sign_y = (byte_state & SIGN_Y_BIT) != 0;
-        let dx = byte_x as i16 - ((sign_x as i16) << 8);
-        let dy = byte_y as i16 - ((sign_y as i16) << 8);
+        let x_overflow = (byte_state & X_OVERFLOW_BIT) != 0;
+        let y_overflow = (byte_state & Y_OVERFLOW_BIT) != 0;
+        // movement is garbage on overflow, drop it but keep the buttons
+        let dx = if x_overflow {
+            0
+        } else {
+            byte_x as i16 - ((sign_x as i16) << 8)
+        };
+        let dy = if y_overflow {
+            0
+        } else {
+            byte_y as i16 - ((sign_y as i16) << 8)
+        };
         let dy = -dy; // make it so that down is positive
         let buttons = MouseButtons::from_state_byte(byte_state);
 
