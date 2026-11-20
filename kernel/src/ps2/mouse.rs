@@ -188,8 +188,8 @@ impl Ps2Mouse {
         };
 
         let packet = MousePacket::from_bytes(byte_state, byte_x, byte_y, byte_4);
-        self.dx_this_frame += packet.dx;
-        self.dy_this_frame += packet.dy;
+        self.dx_this_frame = self.dx_this_frame.saturating_add(packet.dx);
+        self.dy_this_frame = self.dy_this_frame.saturating_add(packet.dy);
         self.previous_buttons = self.buttons;
         self.buttons = packet.buttons;
 
