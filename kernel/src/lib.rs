@@ -9,6 +9,7 @@ pub mod acpi;
 pub mod ahci;
 pub mod allocator;
 pub mod console;
+pub mod debug_overlay;
 pub mod gdt;
 pub mod interrupts;
 pub mod logger;

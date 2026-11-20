@@ -12,6 +12,7 @@ use kernel::{
     BOOTLOADER_CONFIG,
     allocator::{self},
     console::Console,
+    debug_overlay::{DebugInfo, DebugOverlay},
     logger::{self, init_logger},
     memory::{self, BootInfoFrameAllocator},
     ps2::{self},
@@ -138,6 +139,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         let y = (global_renderer_info.height - height) / 2;
         game::Screen::new(x as i32, y as i32, width, height)
     };
+    let mut debug_overlay = DebugOverlay::new(screen.bounding_box.top_left + IVec2::splat(8));
     let mut mesh = {
         let world = game::world::WORLD.lock();
         game::world::get_world_mesh(&world)
@@ -168,7 +170,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         const FPS_CAP: u64 = 60;
         1_000_000_000 / FPS_CAP
     };
-    let mut log_fps = false;
     let mut prev_time = timer::nanos_since_boot(); // track time since last frame refresh
     loop {
         // capping fps
@@ -177,12 +178,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             timer::sleep(REFRESH_INTERVAL_NS - elapsed);
         }
         let now = timer::nanos_since_boot();
-        if log_fps {
-            // full frame time including the cap's sleep, not just the work time
-            let frame_time = now - prev_time;
-            log::info!("FPS: {}", 1_000_000_000.0 / frame_time as f32);
-        }
         prev_time = now;
+        debug_overlay.record_frame(now);
 
         // mouse
         let (dx, dy) = ps2::with_ps2_mouse_mut(|mouse| mouse.pop_delta());
@@ -218,6 +215,14 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             // console active
             if !console.is_active() && matches!(event.code, KeyCode::T | KeyCode::Return) {
                 console.set_active(true);
+                continue;
+            }
+
+            // toggle debug overlay
+            if event.code == KeyCode::F3 {
+                if event.state == pc_keyboard::KeyState::Down {
+                    debug_overlay.toggle_visible();
+                }
                 continue;
             }
 
@@ -284,17 +289,15 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                             log::info!("  set-lba <number> — set disk sector for save/load");
                             log::info!("  save             — save world to disk");
                             log::info!("  load             — load world from disk");
-                            log::info!("  fps              — toggle FPS display");
+                            log::info!("  debug            — toggle debug overlay (F3)");
                             log::info!("  shutdown         — power off");
                             log::info!("Controls: WASD move, mouse look, Space/Shift up/down");
                             log::info!("  T or Enter — open console    Esc — close console");
                             log::info!("  ` — toggle log visibility    Arrows — scroll log");
+                            log::info!("  F3 — toggle debug overlay");
                         }
                         "shutdown" => kernel::acpi::shutdown(),
-                        "fps" => {
-                            log_fps = !log_fps;
-                            log::info!("FPS logging: {}", if log_fps { "on" } else { "off" });
-                        }
+                        "debug" => debug_overlay.toggle_visible(),
                         _ => log::warn!(
                             "Unknown command: \"{}\". Type \"help\" for a list.",
                             trimmed
@@ -369,6 +372,15 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
                     screen.draw_block_outline(&mut frame, &camera, block_pos, Color::BLACK);
                 }
                 screen.draw_crosshair(&mut frame);
+                debug_overlay.render(
+                    &mut frame,
+                    &DebugInfo {
+                        camera: &camera,
+                        targeted_block,
+                        triangle_count: mesh.len(),
+                        uptime_ns: now,
+                    },
+                );
                 logger::LOGGER.render(&mut frame);
                 console.render(&mut frame);
             }
