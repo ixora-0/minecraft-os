@@ -149,7 +149,7 @@ pub struct MouseClicks {
     pub right: bool,
 }
 
-impl const Default for Ps2Mouse {
+const impl Default for Ps2Mouse {
     fn default() -> Self {
         Ps2Mouse {
             buttons: MouseButtons::None,

@@ -88,7 +88,7 @@ impl KeyStates {
         self.0 & bit != 0
     }
 }
-impl const Default for KeyStates {
+const impl Default for KeyStates {
     fn default() -> Self {
         Self(0)
     }
@@ -160,7 +160,7 @@ impl Ps2Keyboard {
     }
 }
 
-impl const Default for Ps2Keyboard {
+const impl Default for Ps2Keyboard {
     fn default() -> Self {
         Ps2Keyboard {
             keyboard: pc_keyboard::Keyboard::new(

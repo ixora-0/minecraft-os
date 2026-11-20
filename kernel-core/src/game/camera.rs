@@ -1,4 +1,4 @@
-use core::{f32, ops::Neg};
+use core::ops::Neg;
 
 use crate::game::{Face, World};
 
@@ -294,8 +294,6 @@ impl Camera {
 
 #[cfg(test)]
 mod tests {
-    use core::f32;
-
     use crate::game::world::empty_world;
 
     use super::*;

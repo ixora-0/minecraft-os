@@ -149,9 +149,9 @@ dependencies = [
 
 [[package]]
 name = "bootloader"
-version = "0.11.15"
+version = "0.11.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5fb69232f250c0d5b74eeb285702b4b0479f574980f45dc9bef97b2c65e2021"
+checksum = "d861319d747a01da5d4d680500b7f808607f902a286b476bd51f991612e39d8e"
 dependencies = [
  "anyhow",
  "bootloader-boot-config",
@@ -165,18 +165,18 @@ dependencies = [
 
 [[package]]
 name = "bootloader-boot-config"
-version = "0.11.15"
+version = "0.11.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10a5e475c13d3d988e105b76b92aeea94614c12590c33495165c02b16e895375"
+checksum = "4b688f587df1a3157a22f82d5f6426e8625d13d0706a4672424398aaee7e33cd"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "bootloader_api"
-version = "0.11.15"
+version = "0.11.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c074a3d1075b26ed77e502d6af8ab1263abbdc3d026c166e46480f973287293"
+checksum = "49f4c2ef60a76c1858ef43c30b6b95c2f5ee4d7c4f9bc47409c3a8dc8910adb9"
 
 [[package]]
 name = "bumpalo"
@@ -1061,9 +1061,9 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.26.0"
+version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82a72c767771b47409d2345987fda8628641887d5466101319899796367354a0"
+checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
  "getrandom 0.4.2",
