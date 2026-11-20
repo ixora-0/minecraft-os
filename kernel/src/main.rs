@@ -178,7 +178,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
         }
         let now = timer::nanos_since_boot();
         if log_fps {
-            log::info!("FPS: {}", 1_000_000_000.0 / elapsed as f32);
+            // full frame time including the cap's sleep, not just the work time
+            let frame_time = now - prev_time;
+            log::info!("FPS: {}", 1_000_000_000.0 / frame_time as f32);
         }
         prev_time = now;
 
