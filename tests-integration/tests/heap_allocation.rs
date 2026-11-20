@@ -65,8 +65,10 @@ fn many_boxes() {
     use alloc::boxed::Box;
     use kernel::allocator::HEAP_SIZE;
 
-    for i in 0..HEAP_SIZE {
-        let x = Box::new(i);
-        assert_eq!(*x, i);
+    // allocate twice the heap in total, so freed memory must be reused
+    const SIZE: usize = 4096;
+    for i in 0..(HEAP_SIZE / SIZE) * 2 {
+        let x = Box::new([i as u8; SIZE]);
+        assert_eq!(x[0], i as u8);
     }
 }
