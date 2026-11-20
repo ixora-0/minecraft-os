@@ -13,6 +13,9 @@ struct Args {
     nvme: bool,
     #[arg(long, default_value = "false")]
     ahci: bool,
+    /// QEMU display backend, e.g. `sdl` or `gtk` [default: `sdl` on Wayland, QEMU's default otherwise]
+    #[arg(long)]
+    display: Option<String>,
     #[arg(default_value = env!("UEFI_IMAGE"))]
     image: String,
 }
@@ -51,6 +54,13 @@ fn main() {
     qemu.arg("-drive")
         .arg(format!("format=raw,file={}", args.image));
     qemu.arg("-serial").arg("stdio");
+    // GTK can't capture relative mouse motion on Wayland, so default to SDL there
+    let display = args
+        .display
+        .or_else(|| env::var_os("WAYLAND_DISPLAY").map(|_| "sdl".to_string()));
+    if let Some(display) = display {
+        qemu.arg("-display").arg(display);
+    }
     // hardware acceleration if available, falls back to TCG otherwise
     if fs::OpenOptions::new()
         .read(true)
