@@ -126,8 +126,6 @@ impl MouseType {
 
 #[derive(Debug)]
 pub struct Ps2Mouse {
-    pub x: i16,
-    pub y: i16,
     pub buttons: MouseButtons,
     pub previous_buttons: MouseButtons,
     pub dx_this_frame: i16,
@@ -147,8 +145,6 @@ pub struct MouseClicks {
 impl const Default for Ps2Mouse {
     fn default() -> Self {
         Ps2Mouse {
-            x: 0,
-            y: 0,
             buttons: MouseButtons::None,
             previous_buttons: MouseButtons::None,
             dx_this_frame: 0,
@@ -192,25 +188,18 @@ impl Ps2Mouse {
         };
 
         let packet = MousePacket::from_bytes(byte_state, byte_x, byte_y, byte_4);
-        self.x += packet.dx;
-        self.y += packet.dy;
         self.dx_this_frame += packet.dx;
         self.dy_this_frame += packet.dy;
         self.previous_buttons = self.buttons;
         self.buttons = packet.buttons;
 
         log::trace!(
-            "Mouse: x={}, y={}, buttons={:?}",
-            self.x,
-            self.y,
+            "Mouse: dx={}, dy={}, buttons={:?}",
+            packet.dx,
+            packet.dy,
             self.buttons
         );
         Some(packet)
-    }
-
-    pub fn reset_position(&mut self) {
-        self.x = 0;
-        self.y = 0;
     }
 
     pub fn pop_clicks(&mut self) -> MouseClicks {
