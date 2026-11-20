@@ -10,7 +10,7 @@ struct Args {
     /// QEMU display backend, e.g. `sdl` or `gtk` [default: `sdl` on Wayland, QEMU's default otherwise]
     #[arg(long)]
     display: Option<String>,
-    #[arg(default_value = env!("UEFI_IMAGE"))]
+    #[arg(default_value = env!("BIOS_IMAGE"))]
     image: String,
 }
 
