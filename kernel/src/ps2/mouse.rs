@@ -134,7 +134,8 @@ impl MouseType {
 #[derive(Debug)]
 pub struct Ps2Mouse {
     pub buttons: MouseButtons,
-    pub previous_buttons: MouseButtons,
+    /// Clicks since last `pop_clicks`
+    pub pending_clicks: MouseClicks,
     pub dx_this_frame: i16,
     pub dy_this_frame: i16,
     /// Number of packet received (0-3)
@@ -149,11 +150,18 @@ pub struct MouseClicks {
     pub right: bool,
 }
 
+impl MouseClicks {
+    pub const NONE: Self = MouseClicks {
+        left: false,
+        right: false,
+    };
+}
+
 const impl Default for Ps2Mouse {
     fn default() -> Self {
         Ps2Mouse {
             buttons: MouseButtons::None,
-            previous_buttons: MouseButtons::None,
+            pending_clicks: MouseClicks::NONE,
             dx_this_frame: 0,
             dy_this_frame: 0,
             packet_state: 0,
@@ -197,7 +205,9 @@ impl Ps2Mouse {
         let packet = MousePacket::from_bytes(byte_state, byte_x, byte_y, byte_4);
         self.dx_this_frame = self.dx_this_frame.saturating_add(packet.dx);
         self.dy_this_frame = self.dy_this_frame.saturating_add(packet.dy);
-        self.previous_buttons = self.buttons;
+        self.pending_clicks.left |= packet.buttons.is_left_down() && !self.buttons.is_left_down();
+        self.pending_clicks.right |=
+            packet.buttons.is_right_down() && !self.buttons.is_right_down();
         self.buttons = packet.buttons;
 
         log::trace!(
@@ -210,12 +220,7 @@ impl Ps2Mouse {
     }
 
     pub fn pop_clicks(&mut self) -> MouseClicks {
-        let clicks = MouseClicks {
-            left: self.buttons.is_left_down() && !self.previous_buttons.is_left_down(),
-            right: self.buttons.is_right_down() && !self.previous_buttons.is_right_down(),
-        };
-        self.previous_buttons = self.buttons;
-        clicks
+        core::mem::replace(&mut self.pending_clicks, MouseClicks::NONE)
     }
 
     pub fn pop_delta(&mut self) -> (i16, i16) {
