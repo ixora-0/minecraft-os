@@ -17,12 +17,12 @@ use renderer::Renderer3d;
 /// and then return to the owning `GlobalRenderer` to `flush()` the finished frame.
 pub struct Frame<'a> {
     color: &'a mut [u8],
-    depth: &'a mut [f32],
+    depth: &'a mut [u32],
     info: FrameBufferInfo,
 }
 
 impl<'a> Frame<'a> {
-    pub fn new(color: &'a mut [u8], depth: &'a mut [f32], info: FrameBufferInfo) -> Self {
+    pub fn new(color: &'a mut [u8], depth: &'a mut [u32], info: FrameBufferInfo) -> Self {
         Self { color, depth, info }
     }
 
@@ -44,6 +44,6 @@ impl<'a> Frame<'a> {
     }
 
     pub fn clear_depth(&mut self) {
-        self.depth.fill(0.0);
+        self.depth.fill(0);
     }
 }

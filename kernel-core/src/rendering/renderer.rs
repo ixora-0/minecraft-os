@@ -265,13 +265,50 @@ impl<'f> Renderer<'f> {
     }
 }
 
+// Depth is handled as fixed point: an integer `n` that means the fraction `n / 2^k`.
+//
+// Faster than using floats (avoids soft-float function calls).
+//
+// The same depth value appears at two scales:
+// - working value (`i64`, k = 48): used while stepping `z += dz` along a row or line.
+//   i64` rather than `u64` because `dz` can be negative and rounding can push `z` slightly
+//   below 0 at triangle edges. Plenty of headroom since z stays near `[0, 1]` (2^48).
+// - stored value (`u32`, k = 32): what the depth buffer keeps per pixel.
+//
+// 32-bit working value would likely be fine for current world size; the extra bits
+// are cheap insurance (shift + clamp per pixel).
+
+/// Number of fractional bits of the working (stepping) value.
+const DEPTH_FRAC_BITS: u32 = 48;
+
+/// Converts a reverse-z depth in `[0, 1]` to the working fixed-point value.
+const fn depth_to_fixed(z: f32) -> i64 {
+    (z * (1u64 << DEPTH_FRAC_BITS) as f32) as i64
+}
+
+/// Converts a working value (48 fractional bits) to the value stored in the depth
+/// buffer (32 fractional bits).
+///
+/// Returns `i64` rather than `u32`, so a slightly negative z stays negative.
+/// (A plain cast would wrap -1 to ~4 billion, the nearest possible depth, drawing
+/// that pixel in front of everything. As `i64`, a negative value loses every `>`
+/// test against stored depths and is never written.)
+// inline probably not neccessary since llvm probably inline this already
+#[inline(always)]
+fn fixed_to_stored(z: i64) -> i64 {
+    (z >> (DEPTH_FRAC_BITS - 32)).min(u32::MAX as i64)
+}
+
 pub struct Renderer3d<'f> {
     buffer: &'f mut [u8],
-    depth_buffer: &'f mut [f32],
+    /// Reverse-z depth per pixel, in fixed point with 32 fractional bits (see
+    /// `fixed_to_stored`). Bigger means closer: 0 is infinitely far (the cleared value),
+    /// `u32::MAX` is the near plane. A pixel is drawn when its depth is `>` the stored one.
+    depth_buffer: &'f mut [u32],
     pub info: FrameBufferInfo,
 }
 impl<'f> Renderer3d<'f> {
-    pub fn new(buffer: &'f mut [u8], depth_buffer: &'f mut [f32], info: FrameBufferInfo) -> Self {
+    pub fn new(buffer: &'f mut [u8], depth_buffer: &'f mut [u32], info: FrameBufferInfo) -> Self {
         Self {
             buffer,
             depth_buffer,
@@ -341,17 +378,18 @@ impl<'f> Renderer3d<'f> {
 
         // bresenham takes exactly max(dx, dy) steps
         let steps = dx.max(dy);
+        let mut z = depth_to_fixed(a.z); // 48 fractional bits
         let dz = if steps > 0 {
-            (b.z - a.z) / steps as f32
+            (depth_to_fixed(b.z) - z) / steps as i64
         } else {
-            0.0
+            0
         };
-        let mut z = a.z;
 
         // HACK: add a small z bias to line segments to avoid z fighting when drawing block outlines
         // ideally we would change the face texture instead of drawing line in 3d space,
         // but this is good enough for now
-        const LINE_Z_BIAS: f32 = 0.0001;
+        // the bias is 0.0001 in NDC z units, converted to the working fixed point at compile time
+        const LINE_Z_BIAS: i64 = depth_to_fixed(0.0001);
         loop {
             if x >= 0
                 && (x as usize) < w
@@ -364,8 +402,11 @@ impl<'f> Renderer3d<'f> {
             {
                 let (xi, yi) = (x as usize, y as usize);
                 let depth_offset = yi * w + xi;
-                if z + LINE_Z_BIAS > self.depth_buffer[depth_offset] {
-                    self.depth_buffer[depth_offset] = z;
+                // test with the bias, but store the unbiased depth.
+                // with the bias, a slightly negative z can still pass the test, so clamp
+                // to 0 before the cast (a negative i64 would wrap to a huge u32 = nearest).
+                if fixed_to_stored(z + LINE_Z_BIAS) > self.depth_buffer[depth_offset] as i64 {
+                    self.depth_buffer[depth_offset] = fixed_to_stored(z).max(0) as u32;
                     let off = (yi * self.info.stride + xi) * bpp;
                     self.buffer[off..off + bpp].copy_from_slice(color_bytes);
                 }
@@ -475,6 +516,7 @@ impl<'f> Renderer3d<'f> {
         // wA = "cross product" of the BC and BP
         // dwA/dPx = (By-Cy)/area is the change in first component of barycentric coords when Px change by 1
         let dz_dx = ((b.y - c.y) * a.z + (c.y - a.y) * b.z + (a.y - b.y) * c.z) * inv_area;
+        let dz_dx = depth_to_fixed(dz_dx);
 
         // precompute color bytes once
         // to avoids branching on pixel format in inner loop.
@@ -533,7 +575,7 @@ impl<'f> Renderer3d<'f> {
             let wa = (c.x - b.x) * (py - b.y) - (c.y - b.y) * (px_start - b.x);
             let wb = (a.x - c.x) * (py - c.y) - (a.y - c.y) * (px_start - c.x);
             let wc = (b.x - a.x) * (py - a.y) - (b.y - a.y) * (px_start - a.x);
-            let mut z = (wa * a.z + wb * b.z + wc * c.z) * inv_area;
+            let mut z = depth_to_fixed((wa * a.z + wb * b.z + wc * c.z) * inv_area);
 
             let depth_row_offset = &mut self.depth_buffer[y * w..(y + 1) * w];
             let buffer_row_offset = y * self.info.stride * bpp;
@@ -541,8 +583,9 @@ impl<'f> Renderer3d<'f> {
             let mut off = buffer_row_offset + xi_left * bpp;
             for depth in &mut depth_row_offset[xi_left..=xi_right] {
                 // depth buffer uses reverse z (far to near)
-                if z > *depth {
-                    *depth = z;
+                let stored = fixed_to_stored(z);
+                if stored > *depth as i64 {
+                    *depth = stored as u32;
                     self.buffer[off..off + bpp].copy_from_slice(color_bytes);
                 }
                 z += dz_dx;
@@ -779,7 +822,7 @@ mod tests {
         };
 
         let mut buffer = [0u8; INFO.byte_len];
-        let mut depth_buffer = [0.0; W * H];
+        let mut depth_buffer = [0u32; W * H];
         let clip = Rectangle {
             top_left: IVec2::new(2, 2),
             size: USizeVec2::new(2, 2),
@@ -822,7 +865,7 @@ mod tests {
         };
 
         let mut buffer = [0u8; INFO.byte_len];
-        let mut depth_buffer = [1.0; W * H];
+        let mut depth_buffer = [u32::MAX; W * H];
         let buffer_addr = buffer.as_mut_ptr() as u64;
         let fb = unsafe { FrameBuffer::new(buffer_addr, INFO) };
 
@@ -852,7 +895,7 @@ mod tests {
         };
 
         let mut buffer = [0u8; INFO.byte_len];
-        let mut depth_buffer = [0.0; W * H];
+        let mut depth_buffer = [0u32; W * H];
         let buffer_addr = buffer.as_mut_ptr() as u64;
         let fb = unsafe { FrameBuffer::new(buffer_addr, INFO) };
 

@@ -11,7 +11,7 @@ pub const EXPECT_MSG_FRAMEBUFFER_NOT_INITIALIZED: &str =
 pub struct GlobalRenderer {
     framebuffer: &'static mut FrameBuffer,
     staging: Vec<u8>,
-    depth: Vec<f32>,
+    depth: Vec<u32>,
     info: FrameBufferInfo,
 }
 
@@ -19,7 +19,7 @@ impl GlobalRenderer {
     fn new(framebuffer: &'static mut FrameBuffer) -> Self {
         let info = framebuffer.info();
         let staging = vec![0u8; info.byte_len];
-        let depth = vec![0.0f32; info.width * info.height];
+        let depth = vec![0u32; info.width * info.height];
         Self {
             framebuffer,
             staging,

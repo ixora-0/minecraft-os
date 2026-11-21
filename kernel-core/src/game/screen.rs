@@ -174,7 +174,7 @@ mod tests {
     fn render_fills_viewport_area() {
         let info = make_framebuffer_info(8, 8, 4);
         let mut color = vec![0u8; info.byte_len];
-        let mut depth = vec![1.0f32; info.width * info.height];
+        let mut depth = vec![u32::MAX; info.width * info.height];
         let screen = Screen::new(2, 2, 4, 4);
         {
             let mut frame = Frame::new(color.as_mut_slice(), depth.as_mut_slice(), info);
@@ -198,7 +198,7 @@ mod tests {
     fn crosshair_respects_screen_offset() {
         let info = make_framebuffer_info(10, 10, 4);
         let mut color = vec![0u8; info.byte_len];
-        let mut depth = vec![0.0f32; info.width * info.height];
+        let mut depth = vec![0u32; info.width * info.height];
         let screen = Screen::new(3, 3, 4, 4);
         {
             let mut frame = Frame::new(color.as_mut_slice(), depth.as_mut_slice(), info);
