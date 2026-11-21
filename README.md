@@ -149,7 +149,7 @@ just test-integration    # integration tests
 
 ## Project layout
 
-- `kernel/` — the bare-metal kernel (`x86_64-unknown-none`)
+- `kernel/` — the bare-metal kernel
 - `kernel-core/` — shared core components (graphics, math, etc.)
 - `src/` — host-side tooling: image builder and QEMU launchers
 - `tests-integration/` — integration tests run under QEMU
