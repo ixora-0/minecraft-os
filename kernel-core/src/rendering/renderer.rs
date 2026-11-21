@@ -575,23 +575,40 @@ impl<'f> Renderer3d<'f> {
             let wa = (c.x - b.x) * (py - b.y) - (c.y - b.y) * (px_start - b.x);
             let wb = (a.x - c.x) * (py - c.y) - (a.y - c.y) * (px_start - c.x);
             let wc = (b.x - a.x) * (py - a.y) - (b.y - a.y) * (px_start - a.x);
-            let mut z = depth_to_fixed((wa * a.z + wb * b.z + wc * c.z) * inv_area);
+            let z = depth_to_fixed((wa * a.z + wb * b.z + wc * c.z) * inv_area);
 
-            let depth_row_offset = &mut self.depth_buffer[y * w..(y + 1) * w];
-            let buffer_row_offset = y * self.info.stride * bpp;
-
-            let mut off = buffer_row_offset + xi_left * bpp;
-            for depth in &mut depth_row_offset[xi_left..=xi_right] {
-                // depth buffer uses reverse z (far to near)
-                let stored = fixed_to_stored(z);
-                if stored > *depth as i64 {
-                    *depth = stored as u32;
-                    self.buffer[off..off + bpp].copy_from_slice(color_bytes);
-                }
-                z += dz_dx;
-                off += bpp;
+            let depths = &mut self.depth_buffer[y * w + xi_left..=y * w + xi_right];
+            let pixels_start = (y * self.info.stride + xi_left) * bpp;
+            let pixels = &mut self.buffer[pixels_start..pixels_start + depths.len() * bpp];
+            // match so bpp is a compile time constant in the common cases. with a known
+            // length, copy_from_slice in fill_span becomes a plain store instead of a
+            // memcpy call per pixel (see fill_span)
+            match bpp {
+                4 => fill_span(depths, pixels, z, dz_dx, color_bytes, 4),
+                3 => fill_span(depths, pixels, z, dz_dx, color_bytes, 3),
+                _ => fill_span(depths, pixels, z, dz_dx, color_bytes, bpp),
             }
         }
+    }
+}
+
+/// Depth tests and fills one row span of a triangle, starting at depth `z` and
+/// stepping by `dz` per pixel.
+///
+/// `copy_from_slice` is a memcpy. When its length (`bpp`) is a compile time constant,
+/// the compiler replaces it with a plain store.
+/// Must be inlined so the literal `bpp` from the caller's `match` reach
+/// `copy_from_slice`.
+#[inline(always)]
+fn fill_span(depths: &mut [u32], pixels: &mut [u8], mut z: i64, dz: i64, color: &[u8], bpp: usize) {
+    for (depth, pixel) in depths.iter_mut().zip(pixels.chunks_exact_mut(bpp)) {
+        // depth buffer uses reverse z (far to near)
+        let stored = fixed_to_stored(z);
+        if stored > *depth as i64 {
+            *depth = stored as u32;
+            pixel.copy_from_slice(color);
+        }
+        z += dz;
     }
 }
 
