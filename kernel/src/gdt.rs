@@ -11,7 +11,11 @@ lazy_static! {
         tss.interrupt_stack_table[DOUBLE_FAULT_IST_INDEX as usize] = {
             // TODO: proper stack allocation
             const STACK_SIZE: u64 = 4096 * 5;
-            static mut STACK: [u8; STACK_SIZE as usize] = [0; STACK_SIZE as usize];
+            // SSE instructions (e.g. movaps) fault on a stack not aligned to 16 bytes
+            #[repr(align(16))]
+            #[allow(dead_code)] // only used through its address
+            struct Stack([u8; STACK_SIZE as usize]);
+            static mut STACK: Stack = Stack([0; STACK_SIZE as usize]);
 
             let stack_start = VirtAddr::from_ptr(&raw const STACK);
             stack_start + STACK_SIZE  // stack end
