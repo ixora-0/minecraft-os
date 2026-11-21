@@ -4,6 +4,9 @@ cargo-features = ["per-package-target"]
 name = "kernel"
 version.workspace = true
 edition = "2024"
+# Soft-float target, used when cargo builds this package directly (clippy, rust-analyzer).
+# The booted kernel and `just test-integration` use the SSE target `x86_64-minecraft-os.json`,
+# which needs build-std, and cargo panics combining build-std with `default-target`.
 default-target = "x86_64-unknown-none"
 
 [[bin]]

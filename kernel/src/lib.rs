@@ -49,7 +49,25 @@ fn build_pic_masks(enabled_irqs: &[u8]) -> (u8, u8) {
     (mask1, mask2)
 }
 
+/// Enables SSE.
+///
+/// Must run before any float or SIMD code. UEFI firmware already enables SSE,
+/// might not enabled automatically on the BIOS.
+pub fn enable_sse() {
+    use x86_64::registers::control::{Cr0, Cr0Flags, Cr4, Cr4Flags};
+    unsafe {
+        Cr0::update(|flags| {
+            flags.remove(Cr0Flags::EMULATE_COPROCESSOR);
+            flags.insert(Cr0Flags::MONITOR_COPROCESSOR);
+        });
+        Cr4::update(|flags| {
+            flags.insert(Cr4Flags::OSFXSR | Cr4Flags::OSXMMEXCPT_ENABLE);
+        });
+    }
+}
+
 pub fn init() {
+    enable_sse();
     gdt::init();
     interrupts::init_idt();
 

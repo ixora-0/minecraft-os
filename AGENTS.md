@@ -11,6 +11,24 @@ Hobby x86_64 OS in Rust (`no_std`) that boots into a voxel game.
 - With nix: the `flake.nix` dev shell (via direnv, or `nix develop -c <cmd>`) provides the toolchain, `qemu`, and `just`.
 - Without nix: install rustup (it reads `rust-toolchain.toml`), `qemu-system-x86_64`, and optionally `just`.
 
+## Kernel target
+
+The kernel is built for `x86_64-minecraft-os.json`: `x86_64-unknown-none` with hardware SSE2 instead of soft-float (`kernel::enable_sse` turns SSE on at boot). The spec was generated from the built-in target, then edited:
+
+```sh
+rustc -Z unstable-options --print target-spec-json --target x86_64-unknown-none > x86_64-minecraft-os.json
+```
+
+- `features`: `-mmx,-sse,-sse2,...,+soft-float` -> `-mmx,+sse,+sse2,-sse3,...` (no `+soft-float`).
+- Removed `"rustc-abi": "softfloat"`.
+- `metadata`: updated `description`, `tier` set to `null`.
+
+Regenerate it the same way after a toolchain bump if the spec format changes.
+
+- Custom targets have no prebuilt `core`, so they need `-Zbuild-std`. Cargo panics when build-std is combined with an artifact dependency or `default-target`, so `build.rs` builds the kernel with a nested `cargo build` into `target/kernel/` instead.
+- `default-target` in `kernel/` and `tests-integration/` stays `x86_64-unknown-none`, so `cargo clippy` and rust-analyzer check the kernel against the soft-float target. Same source, only float codegen differs.
+- `just test-integration` builds the tests for the SSE target.
+
 ## Commands
 
 - `just check`: formatting, clippy, and kernel-core tests, same as CI. Run before finishing a change.
